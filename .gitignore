@@ -5,6 +5,8 @@
 # Engine + Secrets
 .env
 .engine/**
+.github/
+.vscode/
 
 # Dependencies
 test-harness/coldbox/**

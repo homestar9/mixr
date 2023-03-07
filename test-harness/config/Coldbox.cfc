@@ -70,6 +70,16 @@
 			info = [ "coldbox.system" ]
 		};
 
+        moduleSettings = {
+            mixr = {
+                "modules": {
+                    "fooModule": {
+                        "prependPath": "/includes/"
+                    }
+                }
+            }
+        }
+
 	}
 
 	/**
