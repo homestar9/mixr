@@ -1,4 +1,5 @@
 component 
+    extends = "coldbox.system.FrameworkSupertype"
     hint="I am the mixr service."
     singleton
 {
@@ -9,6 +10,7 @@ component
     // this will hold a reference to all manifest maps
     variables._manifests = {}; 
     variables._rootSettings = {};
+    variables._cachedPaths = {};
 
 
     /**
@@ -23,7 +25,7 @@ component
      * Get
      * Returns the mapped path of the asset based on a manifest file
      * 
-     * @path the key to look for in the manifest file
+     * @asset the asset to look for in the manifest file. it must be an exact match
      * @moduleName the name of the module containing the asset (used when getting custom settings)
      * @manifestPath the path inside the module where the manfest file is including filename
      * @moduleRoot the path to the root of the module
@@ -31,31 +33,40 @@ component
      * @prependPath anything you want prepeneded to the asset path just after the module root
      */
     string function get( 
-        required string path, 
-        required string moduleName,
+        required string asset, 
+        string moduleName = "",
         string manifestPath,
         string moduleRoot = "",
         boolean prependModuleRoot,
         string prependPath
     ) {
 
+        var argumentsHash  = hash( serializeJSON( arguments ) );
+        
+        // In local cache
+		if ( variables._cachedPaths.keyExists( argumentsHash ) ) {
+			return variables._cachedPaths[ argumentsHash ];
+		}
+        
         applyDefaults( arguments );
         var manifest = getManifest( arguments.moduleRoot & "/" & arguments.manifestPath );
 
-        if ( !manifest.keyExists( path ) ) {
+        if ( !manifest.keyExists( asset ) ) {
             throw( 
-                message = "asset file not found in manifest", 
+                message = "Asset file not found in manifest", 
                 type = "ManifestAssetNotFound", 
-                detail = "Looked for #path# in manifest file #manifestPath#" 
+                detail = "Looked for #arguments.asset# in manifest file #arguments.manifestPath# for module #arguments.moduleName#" 
             );
         }
 
-        return buildPath(
-            path = manifest[ path ],
+        variables._cachedPaths[ argumentsHash ] = buildPath(
+            asset = manifest[ asset ],
             moduleRoot = arguments.moduleRoot,
             prependModuleRoot = arguments.prependModuleRoot,
             prependPath = arguments.prependPath
         );
+
+        return variables._cachedPaths[ argumentsHash ];
 
     }
 
@@ -63,18 +74,18 @@ component
      * buildPath
      * Assembles the final output path based on passed preferences/arguments
      *
-     * @path the path of the asset from the manifest file
+     * @asset the asset from the manifest file
      * @moduleRoot the module rooth path
      * @prependModuleRoot whether we should prepend the module root
      * @prependPath anything else we want added just before the asset path and after the module root
      */
     private function buildPath(
-        required string path,
+        required string asset,
         required string moduleRoot,
         required boolean prependModuleRoot,
         required string prependPath
     ) {
-        return ( prependModuleRoot ? moduleRoot : '' ) & prependPath & path;
+        return ( prependModuleRoot ? moduleRoot : '' ) & prependPath & asset;
     }
 
     /**
@@ -116,8 +127,8 @@ component
      */
     private struct function getManifest( required string manifestPath ) {
 
-        // remove duplicate slashes
-        arguments.manifestPath = reReplace( manifestPath, "^//?", "" ); 
+        // remove duplicate slashes and ensure the path starts with a forward slash
+        arguments.manifestPath = "/" & cleanPath( manifestPath ); 
 
         // if the file isn't cached
         if ( !variables._manifests.keyExists( arguments.manifestPath ) ) {
@@ -140,15 +151,29 @@ component
     }
 
     private struct function importManifestFile( manifestPath ) {
-        if ( !fileExists( arguments.manifestPath ) ) {
+        
+        var expandedPath = expandPath( arguments.manifestPath );
+        
+        if ( !fileExists( expandedPath )  ) {
             throw( 
                 message = "manifest file not found", 
                 type = "ManifestNotFound", 
-                detail = "Checked #arguments.manifestPath#" 
+                detail = "Checked #expandedPath#" 
             );
         }
 
-        return deserializeJson( fileRead( manifestPath ) );
+        return deserializeJson( fileRead( expandedPath ) );
+    }
+
+    /**
+     * cleanPath
+     * converts multiple // to a single /
+     * also removes leading / because we force it later on
+     * 
+     * @path the path to clean
+     */
+    private function cleanPath( required string path ) {
+        return reReplace( reReplace( arguments.path, "\/\/+", "/", "ALL" ), "^//?", "" );
     }
 
 }

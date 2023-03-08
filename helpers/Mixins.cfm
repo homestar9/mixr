@@ -4,34 +4,33 @@
      * mixr
      * Allows mixr() to be available in all handlers/views for easy access
      * 
-     * @path the path to the asset as it exists in the manifest file
+     * @asset the asset as it exists in the manifest file
      * @moduleName the name of the module
      * @manifestPath override path of the manifest file
+     * @prependModuleRoot whether to prepend the module root to the resulting path
+     * @prependPath
      */ 
     function mixr( 
-        required string path, 
+        required string asset, 
         string moduleName = controller.getRequestService().getContext().getCurrentModule(),
         string manifestPath,
         boolean prependModuleRoot,
         string prependPath
     ) {
         
-        arguments.moduleRoot = controller.getRequestService().getContext().getModuleRoot( moduleName );
+        // performance: no need to get module root, if this is the root module
+        if ( len( arguments.moduleName ) ) {
+            arguments.moduleRoot = controller.getRequestService().getContext().getModuleRoot( moduleName );
+        }
+
+        // performance: not having to use wirebox every time
+        if ( !variables.keyExists( "mixrService" ) ) {
+            variables.mixrService = wirebox.getInstance( "Mixr@mixr" );
+        }
         
-        return wirebox.getInstance( "Mixr@mixr" ).get(
+        return variables.mixrService.get(
             argumentCollection = arguments
         );
-
-        /* var moduleRoot = controller.getRequestService().getContext().getModuleRoot( moduleName );
-        arguments.manifestPath = ( arguments.keyExists( "manifestPath" ) ? arguments.manifestPath : "/includes/rev-manifest.json" );
-        arguments.manifestPath = reReplace( arguments.manifestPath, "/^\/+/", '' );
-
-        
-        return wirebox.getInstance( "Mixr@mixr" ).get(
-            path = arguments.path,
-            moduleRoot =
-            manifestPath = moduleRoot & "/" & arguments.manifestPath
-        ); */
     }
 
 </cfscript>
