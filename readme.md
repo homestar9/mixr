@@ -107,3 +107,12 @@ mixr = {
 }
 ```
 
+## Why Mixr?
+
+Why would this module be useful if Coldbox Elixir already exists?  
+
+ - Coldbox Elixir is a great asset helper, but it is not flexible enough to work with other asset bundlers like Laraval Mix.  Mixr is designed to work with any asset bundler that generates a manifest file. 
+ - Mixr registers itself as a Coldbox helper method, so it can automatically detect which module you are in any time you call `mixr()`
+ - Calling `mixr()` is quick and easy, and will keep your source code nice and clean.
+ - You can configure different settings for each submodule giving you maximum control over your assets and manifest files.
+
