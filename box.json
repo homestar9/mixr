@@ -1,6 +1,6 @@
 {
 	"name" 		: "mixr",
-	"version"   : "1.0.0",
+	"version"   : "0.1.0",
     "location"  : "https://downloads.ortussolutions.com/ortussolutions/coldbox-modules/mixr/@build.version@/mixr-@build.version@.zip",
 	"author" 	: "Ortus Solutions <info@ortussolutions.com>",
 	"homepage"	: "https://github.com/coldbox-modules/mixr",
