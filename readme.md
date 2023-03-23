@@ -1,6 +1,6 @@
 # Mixr (Beta)
 
-![Mixr Logo](https://github.com/homestar9/mixr/blob/master/mixr-logo.svg?raw=true)
+![Mixr Logo](https://github.com/homestar9/mixr/blob/master/mixr.svg?raw=true)
 
 Mixr is a simple, yet flexible static asset helper for Coldbox applications.  Mixr can be configured to use a variety of conventions including Coldbox Elixir, Laraval Mix, or even custom asset bundlers.
 
