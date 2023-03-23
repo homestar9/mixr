@@ -1,18 +1,22 @@
 {
 	"name" 		: "mixr",
 	"version"   : "0.1.0",
-    "location"  : "https://downloads.ortussolutions.com/ortussolutions/coldbox-modules/mixr/@build.version@/mixr-@build.version@.zip",
-	"author" 	: "Ortus Solutions <info@ortussolutions.com>",
-	"homepage"	: "https://github.com/coldbox-modules/mixr",
-	"documentation"		: "https://github.com/coldbox-modules/mixr",
-	"repository"		: { "type" : "git", "url" : "https://github.com/coldbox-modules/mixr" },
-	"bugs" : "https://github.com/coldbox-modules/mixr",
-	"shortDescription"	: "Description goes here",
+	"author" 	: "Angry Sam Productions, Inc.",
+    "location":"ForgeboxStorage",
+	"homepage"	: "https://github.com/homestar9/mixr",
+	"documentation"		: "https://github.com/homestar9/mixr",
+	"repository"		: { "type" : "git", "url" : "https://github.com/homestar9/mixr" },
+	"bugs" : "https://github.com/homestar9/mixr",
+	"shortDescription"	: "Mixr is a simple, yet flexible static asset helper for Coldbox applications",
+    "description":"Mixr is a simple, yet flexible static asset helper for Coldbox applications.  Mixr can be configured to use a variety of conventions including Coldbox Elixir, Laraval Mix, or even custom asset bundlers. Use Mixr in your app to automatically generate correct distribition asset paths in your Coldbox views and layouts.  Mixr automatically parses and maps asset manifests files to return the real path.",
 	"slug"		: "mixr",
 	"type"		: "modules",
 	"keywords":"",
 	"license"			: [
-		{ "type" : "Apache2", "url" : "http://www.apache.org/licenses/LICENSE-2.0.html" }
+		{
+            "type":"MIT",
+            "URL":"https://github.com/homestar9/nap-time/blob/master/LICENSE.md"
+        }
 	],
 	"contributors"		: [
 	],
@@ -22,8 +26,12 @@
 		"commandbox-cfformat":"*",
         "commandbox-docbox":"*",
 		"commandbox-dotenv":"*",
-        "commandbox-cfconfig":"*"
+        "commandbox-cfconfig":"*",
+        "testbox":"^4.5.0+5"
 	},
+    "installPaths":{
+        "testbox":"testbox/"
+    },
 	"ignore":[
         "**/.*",
         "test-harness",
