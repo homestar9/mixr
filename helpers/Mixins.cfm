@@ -18,16 +18,12 @@
         string prependPath
     ) {
         
-        // performance: no need to get module root, if this is the root module
-        if ( len( arguments.moduleName ) ) {
-            arguments.moduleRoot = controller.getRequestService().getContext().getModuleRoot( moduleName );
-        }
-
-        // performance: not having to use wirebox every time
+        // performance: not having to use wirebox every time.
         if ( !variables.keyExists( "mixrService" ) ) {
             variables.mixrService = wirebox.getInstance( "Mixr@mixr" );
         }
-        
+    
+
         return variables.mixrService.get(
             argumentCollection = arguments
         );

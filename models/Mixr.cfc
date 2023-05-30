@@ -5,6 +5,7 @@ component
 {
 
     property name="settings" inject="coldbox:moduleSettings:mixr";
+    property name="controller" inject="coldbox";
 
 
     // this will hold a reference to all manifest maps
@@ -38,20 +39,40 @@ component
         string manifestPath,
         string moduleRoot = "",
         boolean prependModuleRoot,
-        string prependPath
+        string prependPath,
     ) {
-
+        
         var argumentsHash  = hash( serializeJSON( arguments ) );
         
         // In local cache
 		if ( variables._cachedPaths.keyExists( argumentsHash ) ) {
 			return variables._cachedPaths[ argumentsHash ];
 		}
+
+        // If this isn't the root module, we have some extra processing to do
+        if ( len( arguments.moduleName ) ) {
+
+            // if the moduleroot isn't defined, have coldbox calculate it.
+            if ( !len( arguments.moduleRoot ) ) {
+                arguments.moduleRoot = controller.getRequestService().getContext().getModuleRoot( arguments.moduleName );
+            }
+
+            // if mixr doesn't have settings for this module yet, create them
+            if ( !settings.modules.keyExists( arguments.moduleName ) ) {
+                var moduleSettings = getModuleSettings( arguments.moduleName );
+                if ( moduleSettings.keyExists( "mixr" ) ) {
+                    settings.modules[ arguments.moduleName ] = moduleSettings.mixr;
+                } else {
+                    settings.modules[ arguments.moduleName ] = {};
+                }
+            }
+
+        }
         
         applyDefaults( arguments );
         var manifest = getManifest( arguments.moduleRoot & "/" & arguments.manifestPath );
 
-        if ( !manifest.keyExists( asset ) ) {
+        if ( !manifest.keyExists( arguments.asset ) ) {
             throw( 
                 message = "Asset file not found in manifest", 
                 type = "ManifestAssetNotFound", 
