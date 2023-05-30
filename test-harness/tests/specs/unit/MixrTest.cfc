@@ -58,11 +58,11 @@ component extends="coldbox.system.testing.BaseModelTest" model="mixr.models.Mixr
                 var result = model.get(
                     asset = "css/foo.css",
                     moduleName = "fooModule",
-                    moduleRoot = "/modules/fooModule/",
+                    moduleRoot = "/modules_app/fooModule/",
                     prependModuleRoot = true
                 );
                 debug( result );
-                expect( result ).toBe( "/modules/fooModule/css/foo.28fc241b1431baefb2a9b4307ed9cff1.css" );
+                expect( result ).toBe( "/modules_app/fooModule/css/foo.28fc241b1431baefb2a9b4307ed9cff1.css" );
             } );
 
 		} );
