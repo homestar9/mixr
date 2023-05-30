@@ -26,6 +26,14 @@
         #mixr( "js/foo.js", "fooModule", "public/mix-manifest.json" )#
     </div>
 
+    <!--- Assets in a submodule that use the moduleconfig to set convention --->
+    <div>
+        #mixr( "/js/laravel.js", "laravel" )#
+    </div>
+    <div>
+        #mixr( "/css/laravel.css", "laravel" )#
+    </div>
+
     
 
     <h2>ElixirPath Tests</h2>
@@ -52,9 +60,9 @@
         )#
     </div>
 
-    <h2>Performance Tests</h2>
-
     <cfset iterations = "1000">
+
+    <h2>Performance Tests (#iterations# iterations)</h2>
 
     <h3>Mixr</h3>
 
