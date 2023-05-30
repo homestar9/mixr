@@ -1,31 +1,38 @@
 component {
 
 	// Module Properties
-	this.title 				= "login";
+	this.title 				= "laravel";
 	this.author 			= "";
 	this.webURL 			= "";
 	this.description 		= "";
 	this.version			= "1.0.0";
 
 	// Module Entry Point
-	this.entryPoint			= "/login";
+	this.entryPoint			= "/laravel";
 	// Model Namespace
-	this.modelNamespace		= "login";
+	this.modelNamespace		= "laravel";
 	// CF Mapping
-	this.cfmapping			= "login";
-
+	this.cfmapping			= "laravel";
+	// Auto-map models
+	this.autoMapModels		= true;
 	// Module Dependencies
     this.dependencies 		= [];
 
 	function configure(){
 
 		layoutSettings = {
-            defaultLayout = "Login.cfm"
+            defaultLayout = "Laravel.cfm"
         };
         
         // module settings - stored in modules.name.settings
-        // Note: We are using the default Coldbox elixir convention for Mixr
-		variables.settings = {};
+        // Note: we are overriding mixr conventions in this module
+		variables.settings = {
+            mixr: {
+                "manifestPath": "/includes/mix-manifest.json",
+                "prependModuleRoot": true,
+                "prependPath": "/includes" 
+            }
+        };
 
 	}
 
