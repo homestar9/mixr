@@ -2,7 +2,7 @@
 
 ![Mixr Logo](https://github.com/homestar9/mixr/blob/master/mixr.svg?raw=true)
 
-Mixr is a simple, yet flexible static asset helper for Coldbox applications.  Mixr can be configured to use a variety of conventions including Coldbox Elixir, Laraval Mix, or even custom asset bundlers.
+Mixr is a simple, yet flexible static asset helper for Coldbox applications.  Mixr can be configured to use a variety of conventions including Coldbox Elixir, Laravel Mix, or even custom asset bundlers.
 
 Use Mixr in your app to automatically generate correct distribition asset paths in your Coldbox views and layouts.  Mixr automatically parses and maps asset manifests files to return the real path.
 
@@ -40,6 +40,52 @@ moduleSettings = {
 | `prependModuleRoot` | (boolean) Whether or not to prepend the module root to the path | true |
 | `prependPath` | (string) A path to prepend to the asset path | "" |
 | `modules` | (struct) A struct of module names so you can pass along custom configs to submodules | {} |
+
+## Submodule Settings
+
+Sometimes a tracked or untracked submodule needs to use its own asset manifest file conventions. For example, if you use Laravel Mix in your main app, but you use Coldbox Elixir in a submodule, you can configure Mixr to use different settings for each submodule.  
+
+### Method 1: Configure Via ModuleConfig.cfc *(recommended)*
+
+Within the module's `ModuleConfig.cfc` file, add a `mixr` struct to the `configure()` method:
+
+```js
+function configure(){
+    
+    // module settings - we are overriding mixr conventions in this module
+    variables.settings = {
+        mixr: {
+            "manifestPath": "/includes/mix-manifest.json",
+            "prependModuleRoot": true,
+            "prependPath": "/includes" 
+        }
+    };
+
+}
+```
+
+### Method 2: Configure Via Coldbox.cfc
+
+You can also configure Mixr in your main `config/Coldbox.cfc` file.  Add your module name to the `mixr.modules`  in `moduleSettings` like this:
+
+```js
+moduleSettings = {
+    // default configuration designed to emulate Coldbox Elixir
+    mixr: {
+        "manifestPath" = "/includes/rev-manifest.json",
+        "prependModuleRoot" = true,
+        "prependPath" = "",
+        "modules": {
+            // custom configuration for a submodule
+            "fooModule": {
+                "manifestPath": "/includes/mix-manifest.json",
+                "prependModuleRoot": true,
+                "prependPath": "/includes"  
+            }
+        }
+    }
+};
+```
 
 
 ## Usage
@@ -111,8 +157,12 @@ mixr = {
 
 Why would this module be useful if Coldbox Elixir already exists?  
 
- - Coldbox Elixir is a great asset helper, but it is not flexible enough to work with other asset bundlers like Laraval Mix.  Mixr is designed to work with any asset bundler that generates a manifest file. 
+ - Coldbox Elixir is a great asset helper, but it is not flexible enough to work with other asset bundlers like Laravel Mix.  Mixr is designed to work with any asset bundler that generates a manifest file. 
  - Mixr registers itself as a Coldbox helper method, so it can automatically detect which module you are in any time you call `mixr()`
  - Calling `mixr()` is quick and easy, and will keep your source code nice and clean.
  - You can configure different settings for each submodule giving you maximum control over your assets and manifest files.
 
+
+ ## Roadmap:
+
+ - Integration tests: I currently have unit tests in place, but would like to set up some better real-world testing for this module.
