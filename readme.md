@@ -1,4 +1,4 @@
-# Mixr (Beta)
+# Mixr
 
 ![Mixr Logo](https://github.com/homestar9/mixr/blob/master/mixr.svg?raw=true)
 
