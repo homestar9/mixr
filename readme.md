@@ -166,3 +166,7 @@ Why would this module be useful if Coldbox Elixir already exists?
  ## Roadmap:
 
  - Integration tests: I currently have unit tests in place, but would like to set up some better real-world testing for this module.
+
+## About the Author:
+
+This module was passionately developed by [Angry Sam Productions](https://www.angrysam.com), a web development company based in California. We believe creating and contributing open source software strenghens the development community and makes the world a better place.  If you would like to learn more about our company or hire us for your next project, please [contact us](https://www.angrysam.com/).
