@@ -39,7 +39,7 @@ component
         string manifestPath,
         string moduleRoot = "",
         boolean prependModuleRoot,
-        string prependPath,
+        string prependPath
     ) {
         
         var argumentsHash  = hash( serializeJSON( arguments ) );
