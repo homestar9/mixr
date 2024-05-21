@@ -1,7 +1,8 @@
 component extends="coldbox.system.testing.BaseModelTest" model="mixr.models.Mixr" {
 
-	variables._settings = {
-        "manifestPath": "/tests/resources/rev-manifest.json",
+	// custom settings for our tests
+    variables._settings = {
+        "manifestPath": "/tests/resources/mix-manifest.json",
         "prependModuleRoot": false,
         "prependPath": "",
         "modules": {
@@ -43,7 +44,7 @@ component extends="coldbox.system.testing.BaseModelTest" model="mixr.models.Mixr
             
             it( "Can return an asset from a manifest file", function(){
                 var result = model.get( "/tests/asset.js" );
-                expect( result ).toBe( "/tests/asset.123456.js" );
+                expect( result ).toBe( "/tests/asset.js?id=97075299beff243f0162befb209c2391" );
             });
 
             it( "Can return an asset from a custom manfest path", function(){

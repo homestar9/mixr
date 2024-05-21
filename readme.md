@@ -22,51 +22,77 @@ Configure Mixr in your Coldbox `config/Coldbox.cfc` file:
 
 ```js
 moduleSettings = {
-    // default configuration designed to emulate Coldbox Elixir
+    // default configuration designed to emulate Laravel Mix 6
     mixr: {
-        "manifestPath" = "/includes/rev-manifest.json",
+        "manifestPath" = "/includes/mix-manifest.json",
         "prependModuleRoot" = true,
-        "prependPath" = "",
+        "prependPath" = "/includes",
         "modules": {}
     }
 };
 ```
 
+The above configuration will work in a ColdBox app that uses Laravel 6 to generate asset manifests.  If you are using Coldbox Elixir, you will need to change the configuration to match the conventions of your asset bundler.  See the [Upgrade Guide](#upgrade-guide) for more information.
+
+For reference, a Laravel 6 Manifest file might look like this:
+
+```js
+{
+    "/css/app.css": "/css/app.css?id=123",
+    "/js/app.js": "/js/app.js?id=123"
+}
+```
+
+The same manifest file might look like this when using Coldbox Elixir. You will need to update the default configuration if you are using Coldbox Elixir starting with Mixr version 2.0:
+
+```js
+{
+    "includes/js/app.js": "includes/js/app.123.js",
+    "includes/css/app.css": "includes/css/app.123.css"
+}
+``` 
+
+## Upgrade Guide
+
+### Upgrading from 1.x to 2.x
+
+Version 2.0 introduces a **breaking change** where the configuration defaults have been changed to emulate Laravel Mix 6.  If you are upgrading from 1.x to 2.x, and you use Coldbox Elixir, you will need to update your configuration (see examples for details)
+
 ## Settings
 
 | Setting | Description | Default |
 | --- | --- | --- |
-| `manifestPath` | (string) The path from the root where your manifest file resides | /includes/rev-manifest.json |
+| `manifestPath` | (string) The path from the root where your manifest file resides | /includes/mix-manifest.json |
 | `prependModuleRoot` | (boolean) Whether or not to prepend the module root to the path | true |
-| `prependPath` | (string) A path to prepend to the asset path | "" |
+| `prependPath` | (string) A path to prepend to the asset path | /includes |
 | `modules` | (struct) A struct of module names so you can pass along custom configs to submodules | {} |
 
 ## Submodule Settings
 
 Sometimes a tracked or untracked submodule needs to use its own asset manifest file conventions. For example, if you use Laravel Mix in your main app, but you use Coldbox Elixir in a submodule, you can configure Mixr to use different settings for each submodule.  
 
-### Method 1: Configure Via ModuleConfig.cfc *(recommended)*
+### Configure Via Submodule's ModuleConfig.cfc
 
-Within the module's `ModuleConfig.cfc` file, add a `mixr` struct to the `configure()` method:
+You can provide module-specific settings to Mixr, just in case some submodules use different conventions.  To do this within a module's `ModuleConfig.cfc` file, add a `mixr` struct to the `configure()` method:
 
 ```js
 function configure(){
     
-    // module settings - we are overriding mixr conventions in this module
+    // module settings - we are overriding mixr conventions in this module to emulate Coldbox Elixir
     variables.settings = {
         mixr: {
-            "manifestPath": "/includes/mix-manifest.json",
+            "manifestPath": "/includes/rev-manifest.json",
             "prependModuleRoot": true,
-            "prependPath": "/includes" 
+            "prependPath": "" 
         }
     };
 
 }
 ```
 
-### Method 2: Configure Via Coldbox.cfc
+### Configure Via Coldbox.cfc
 
-You can also configure Mixr in your main `config/Coldbox.cfc` file.  Add your module name to the `mixr.modules`  in `moduleSettings` like this:
+Alternatively, you can also configure Mixr in your main `config/Coldbox.cfc` file.  Add any submodule to the `mixr.modules`  in `moduleSettings` like this to override settings:
 
 ```js
 moduleSettings = {
@@ -76,7 +102,7 @@ moduleSettings = {
         "prependModuleRoot" = true,
         "prependPath" = "",
         "modules": {
-            // custom configuration for a submodule
+            // custom configuration for a submodule to emaulate Laravel Mix V6
             "fooModule": {
                 "manifestPath": "/includes/mix-manifest.json",
                 "prependModuleRoot": true,
@@ -116,20 +142,26 @@ Mixr automatically attempts to figure out which module the request is coming fro
 
 #### Coldbox Elixir
 
-No need to change any defaults. It should work out of the box.
-
 ```js
 // config/Coldbox.cfc
+mixr = {
+    "manifestPath": "/includes/rev-manifest.json",
+    "prependModuleRoot": true,
+    "prependPath": "",
+    "modules": {}
+}
 ```
 
 #### Laravel Mix
+
+No need to change any defaults. It should work out of the box. Here is the configuration, just in case you need to change it:
 
 ```js
 // configure mixr to use laravel mix conventions
 mixr = {
     "manifestPath": "/includes/mix-manifest.json",
     "prependModuleRoot": true,
-    "prependPath": "includes",
+    "prependPath": "/includes",
     "modules": {}
 }
 ```
@@ -155,7 +187,7 @@ mixr = {
 
 ## Why Mixr?
 
-Why would this module be useful if Coldbox Elixir already exists?  
+Why Does Coldbox need another asset helper?  Here are a few reasons why Mixr is a great choice for your Coldbox app: 
 
  - Coldbox Elixir is a great asset helper, but it is not flexible enough to work with other asset bundlers like Laravel Mix.  Mixr is designed to work with any asset bundler that generates a manifest file. 
  - Mixr registers itself as a Coldbox helper method, so it can automatically detect which module you are in any time you call `mixr()`
@@ -170,3 +202,12 @@ Why would this module be useful if Coldbox Elixir already exists?
 ## About the Author:
 
 This module was passionately developed by [Angry Sam Productions](https://www.angrysam.com), a web development company based in California. We believe creating and contributing open source software strenghens the development community and makes the world a better place.  If you would like to learn more about our company or hire us for your next project, please [contact us](https://www.angrysam.com/).
+
+## Running Tests
+
+To run the tests, simply run the following command from the root of the project in Commandbox:
+`start server-lucee@5.json` (or whichever server JSON you want to use)
+`server open` (to open the server in your browser)
+navigate to `/tests/runner.cfm` in your browser
+
+```bash

@@ -29,9 +29,9 @@ component {
 	 */
 	function configure(){
 		settings = {
-            "manifestPath" = "/includes/rev-manifest.json",
+            "manifestPath" = "/includes/mix-manifest.json",
             "prependModuleRoot" = true,
-            "prependPath" = "",
+            "prependPath" = "/includes",
             "modules": {}
 		};
 	}

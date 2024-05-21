@@ -1,18 +1,18 @@
 component {
 
 	// Module Properties
-	this.title 				= "laravel";
+	this.title 				= "elixir";
 	this.author 			= "";
 	this.webURL 			= "";
 	this.description 		= "";
 	this.version			= "1.0.0";
 
 	// Module Entry Point
-	this.entryPoint			= "/laravel";
+	this.entryPoint			= "/elixir";
 	// Model Namespace
-	this.modelNamespace		= "laravel";
+	this.modelNamespace		= "elixir";
 	// CF Mapping
-	this.cfmapping			= "laravel";
+	this.cfmapping			= "elixir";
 	// Auto-map models
 	this.autoMapModels		= true;
 	// Module Dependencies
@@ -21,16 +21,16 @@ component {
 	function configure(){
 
 		layoutSettings = {
-            defaultLayout = "Laravel.cfm"
+            defaultLayout = "elixir.cfm"
         };
         
         // module settings - stored in modules.name.settings
         // Note: we are overriding mixr conventions in this module
 		variables.settings = {
             mixr: {
-                "manifestPath": "/includes/mix-manifest.json",
+                "manifestPath": "/includes/rev-manifest.json",
                 "prependModuleRoot": true,
-                "prependPath": "/includes" 
+                "prependPath": "/" 
             }
         };
 
