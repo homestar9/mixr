@@ -1,6 +1,6 @@
 {
 	"name" 		: "mixr",
-	"version"   : "2.0.0",
+	"version"   : "2.0.1",
 	"author" 	: "Angry Sam Productions, Inc.",
     "location":"ForgeboxStorage",
 	"homepage"	: "https://github.com/homestar9/mixr",
@@ -15,7 +15,7 @@
 	"license"			: [
 		{
             "type":"MIT",
-            "URL":"https://github.com/homestar9/nap-time/blob/master/LICENSE.md"
+            "URL":"https://github.com/homestar9/mixr/blob/master/LICENSE.md"
         }
 	],
 	"contributors"		: [
