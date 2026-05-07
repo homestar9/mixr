@@ -199,26 +199,57 @@ component
 	}
 
 	/**
-	 * Build the effective settings struct for one module by cascading
-	 * explicit module settings onto the root settings. The 'modules' key is
-	 * never inherited. Submodule settings are lazy-loaded the first time
-	 * a moduleName is seen.
+	 * Build the effective settings struct for one module.
 	 *
-	 * @moduleName Module name; "" returns root settings only.
+	 * Two-tier cascade:
+	 *
+	 *   - **Behavioral keys** (driver, devMode, devServerUrl,
+	 *     renderModulePreload, includeImportedCss, cache) inherit from the
+	 *     root app's settings so the host can set one default and have it
+	 *     apply to every submodule.
+	 *
+	 *   - **Module-relative paths** (manifestPath, buildPath, hotFilePath,
+	 *     prependModuleRoot, prependPath) do NOT inherit from root. Each
+	 *     module owns its own asset layout, so paths fall back to the
+	 *     system defaults declared in mixr's ModuleConfig.cfc unless the
+	 *     submodule (or moduleSettings.mixr.modules.<name>) explicitly
+	 *     overrides them. This avoids the foot-gun where a host app's
+	 *     `manifestPath` would otherwise be joined onto every submodule's
+	 *     moduleRoot.
+	 *
+	 *   - **Submodule overrides** win over both of the above for any key
+	 *     they explicitly declare.
+	 *
+	 * The 'modules' key itself is never inherited. Submodule settings are
+	 * lazy-loaded the first time a moduleName is seen.
+	 *
+	 * @moduleName Module name; "" returns the root app's settings.
 	 */
 	private struct function effectiveSettings( required string moduleName ) {
-		var base = duplicate( settings );
-		structDelete( base, "modules" );
+		var rootBase = duplicate( settings );
+		structDelete( rootBase, "modules" );
 
 		// merge cache substruct defaults
-		if ( !base.keyExists( "cache" ) || !isStruct( base.cache ) ) {
-			base.cache = { enabled: true, devCheckInterval: 2000 };
+		if ( !rootBase.keyExists( "cache" ) || !isStruct( rootBase.cache ) ) {
+			rootBase.cache = { enabled: true, devCheckInterval: 2000 };
 		} else {
-			if ( !base.cache.keyExists( "enabled" ) )          base.cache.enabled = true;
-			if ( !base.cache.keyExists( "devCheckInterval" ) ) base.cache.devCheckInterval = 2000;
+			if ( !rootBase.cache.keyExists( "enabled" ) )          rootBase.cache.enabled = true;
+			if ( !rootBase.cache.keyExists( "devCheckInterval" ) ) rootBase.cache.devCheckInterval = 2000;
 		}
 
-		if ( !len( arguments.moduleName ) ) return base;
+		// Root app: rootBase IS the effective settings.
+		if ( !len( arguments.moduleName ) ) return rootBase;
+
+		// Submodule: start from system path defaults, cascade behavioral
+		// keys from root, then overlay any explicit submodule settings.
+		var base = systemPathDefaults();
+
+		var BEHAVIORAL_KEYS = [ "driver", "devMode", "devServerUrl", "renderModulePreload", "includeImportedCss" ];
+		for ( var k in BEHAVIORAL_KEYS ) {
+			if ( rootBase.keyExists( k ) ) base[ k ] = rootBase[ k ];
+		}
+		// cache is behavioral and always cascades
+		base.cache = duplicate( rootBase.cache );
 
 		// lazy-load the submodule's own ModuleConfig.cfc settings
 		if ( !settings.modules.keyExists( arguments.moduleName ) ) {
@@ -237,6 +268,22 @@ component
 		}
 
 		return base;
+	}
+
+	/**
+	 * System defaults for module-relative path settings. Kept in sync with
+	 * the defaults declared in mixr's ModuleConfig.cfc. These are the values
+	 * a submodule sees when neither it nor moduleSettings.mixr.modules.<name>
+	 * declares an override — they are NOT inherited from the root app.
+	 */
+	private struct function systemPathDefaults() {
+		return {
+			"manifestPath"      : "/includes/build/.vite/manifest.json",
+			"buildPath"         : "/includes/build",
+			"hotFilePath"       : "/includes/hot",
+			"prependModuleRoot" : true,
+			"prependPath"       : "/includes"
+		};
 	}
 
 	/**

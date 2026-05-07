@@ -82,7 +82,13 @@ Two things to know:
 - `variables._drivers` — driver instance per moduleName. First call to `driverFor()` resolves config, picks `ViteDriver` or `ManifestDriver`, and pins it. Every subsequent call is a struct lookup + delegate.
 - `viteClient()` per-request dedupe via RequestContext private values: `event.setPrivateValue("mixr:viteClientRendered:#moduleName#", true)`.
 
-Settings cascade in `effectiveSettings()`: cached per-module once, and built by `duplicate(rootSettings)` → strip `modules` → merge `cache` defaults → overlay `settings.modules[moduleName]` (loaded lazily via `wirebox.getInstance(dsl="coldbox:moduleSettings:#name#")`). The `modules` key itself is never inherited.
+Settings cascade in `effectiveSettings()`: cached per-module once. Two-tier:
+
+- **Behavioral keys cascade from root**: `driver`, `devMode`, `devServerUrl`, `renderModulePreload`, `includeImportedCss`, `cache`. The host app's value applies to every submodule that doesn't override it.
+- **Module-relative paths do NOT cascade**: `manifestPath`, `buildPath`, `hotFilePath`, `prependModuleRoot`, `prependPath`. A submodule with no explicit setting falls back to system defaults from `systemPathDefaults()` (kept in sync with `ModuleConfig.cfc`'s declared defaults), NOT to whatever the root app set. This avoids the broken case where a host's manifestPath would be joined onto a submodule's moduleRoot.
+- **Explicit submodule settings (from `moduleSettings.mixr.modules.<name>` or the submodule's own `variables.settings.mixr`) win over both.**
+
+Submodule settings are loaded lazily via the WireBox ColdBox DSL (`coldbox:moduleSettings:<name>`). The `modules` key itself is never inherited.
 
 `Mixr.cfc` does **not** extend `coldbox.system.FrameworkSupertype`. Submodule settings come from the WireBox ColdBox DSL above. Don't reintroduce the inheritance.
 

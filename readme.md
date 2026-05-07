@@ -209,8 +209,22 @@ moduleSettings = {
 };
 ```
 
-Settings cascade: explicit call args win → submodule overrides → root settings →
-defaults.
+Settings cascade rules:
+
+1. **Behavioral keys cascade from root** — `driver`, `devMode`, `devServerUrl`,
+   `renderModulePreload`, `includeImportedCss`, and `cache` defined on the host
+   app apply to every submodule unless that submodule overrides them. This lets
+   you set `devMode = true` once for the whole app.
+
+2. **Module-relative paths do NOT cascade** — `manifestPath`, `buildPath`,
+   `hotFilePath`, `prependModuleRoot`, and `prependPath` are *not* inherited
+   from the root. Each module owns its own asset layout, and these fall back to
+   Mixr's built-in defaults unless the submodule (or
+   `mixr.modules.<name>`) declares them. This avoids the foot-gun where a host
+   app's `manifestPath` would otherwise be joined onto every submodule's
+   moduleRoot.
+
+3. **Explicit submodule settings always win** over both of the above.
 
 ---
 
