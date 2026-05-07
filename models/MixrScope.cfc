@@ -15,7 +15,7 @@ component {
 	 * @service    The Mixr facade singleton.
 	 * @moduleName Module name to bind every forwarded call to ("" for root).
 	 */
-	function init( required any service, required string moduleName ) {
+	function init( required any service, required string moduleName ){
 		variables.service    = arguments.service;
 		variables.moduleName = arguments.moduleName;
 		return this;
@@ -27,8 +27,12 @@ component {
 	 * @entry   Logical entry path (manifest key).
 	 * @options Driver-specific overrides; rarely needed.
 	 */
-	string function path( required string entry, struct options = {} ) {
-		return variables.service.path( entry = arguments.entry, moduleName = variables.moduleName, options = arguments.options );
+	string function path( required string entry, struct options = {} ){
+		return variables.service.path(
+			entry      = arguments.entry,
+			moduleName = variables.moduleName,
+			options    = arguments.options
+		);
 	}
 
 	/**
@@ -37,22 +41,26 @@ component {
 	 * @entry   Logical entry path.
 	 * @options Optional struct: { as, attributes, renderModulePreload, includeImportedCss }.
 	 */
-	string function tags( required string entry, struct options = {} ) {
-		return variables.service.tags( entry = arguments.entry, moduleName = variables.moduleName, options = arguments.options );
+	string function tags( required string entry, struct options = {} ){
+		return variables.service.tags(
+			entry      = arguments.entry,
+			moduleName = variables.moduleName,
+			options    = arguments.options
+		);
 	}
 
 	/**
 	 * Render <script type="module" src=".../@vite/client"></script> for the
 	 * bound module. Empty string in production. Deduped per request.
 	 */
-	string function viteClient() {
+	string function viteClient(){
 		return variables.service.viteClient( moduleName = variables.moduleName );
 	}
 
 	/**
 	 * True when the bound module's driver is in dev/hot mode.
 	 */
-	boolean function isHot() {
+	boolean function isHot(){
 		return variables.service.isHot( moduleName = variables.moduleName );
 	}
 
@@ -63,14 +71,18 @@ component {
 	 * @entry   Logical entry path.
 	 * @options Optional struct: { renderModulePreload, includeImportedCss }.
 	 */
-	struct function bundle( required string entry, struct options = {} ) {
-		return variables.service.bundle( entry = arguments.entry, moduleName = variables.moduleName, options = arguments.options );
+	struct function bundle( required string entry, struct options = {} ){
+		return variables.service.bundle(
+			entry      = arguments.entry,
+			moduleName = variables.moduleName,
+			options    = arguments.options
+		);
 	}
 
 	/**
 	 * Drop all caches for the bound module. Useful in tests and dev workflows.
 	 */
-	function refresh() {
+	function refresh(){
 		variables.service.refresh( moduleName = variables.moduleName );
 	}
 
