@@ -100,6 +100,23 @@
 				moduleName 		= request.MODULE_NAME,
 				invocationPath 	= "moduleroot"
 			);
+
+		// IMPORTANT: this harness registers the module-under-test from
+		// `afterAspectsLoad`, which fires AFTER `Renderer.startup()` has
+		// already loaded the global `applicationHelper` list into the
+		// singleton renderer's variables scope (see
+		// coldbox/system/web/services/LoaderService.cfc lines 88-102).
+		// Because of that ordering, mixr's `helpers/Mixins.cfm` is added
+		// to the setting too late for the renderer to ever pick it up,
+		// and views fail with "No matching function [MIXR]" while
+		// handlers work fine (handlers re-load helpers per request via
+		// onHandlerDIComplete). Real apps don't hit this because they
+		// load mixr via convention-based discovery during
+		// `activateAllModules()` BEFORE `Renderer.startup()` runs.
+		// Force the renderer to re-inject helpers so the harness can
+		// exercise view-side `mixr()` calls. This belongs in the harness,
+		// not in the module.
+		controller.getRenderer().loadApplicationHelpers( force = true );
 	}
 
 }
