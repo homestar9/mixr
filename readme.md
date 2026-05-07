@@ -2,212 +2,318 @@
 
 ![Mixr Logo](https://github.com/homestar9/mixr/blob/master/mixr.svg?raw=true)
 
-Mixr is a simple, yet flexible static asset helper for Coldbox applications.  Mixr can be configured to use a variety of conventions including Coldbox Elixir, Laravel Mix, or even custom asset bundlers.
+**Mixr** is a flexible static asset helper for ColdBox apps. It resolves logical
+asset paths (`resources/js/app.js`) into the real, hashed files your bundler
+emits, and — new in 3.0 — speaks fluent **Vite**: dev-server hot reload, CSS
+aggregation, module preload tags, and the works.
 
-Use Mixr in your app to automatically generate correct distribition asset paths in your Coldbox views and layouts.  Mixr automatically parses and maps asset manifests files to return the real path.
+Out of the box Mixr supports:
 
-Mixr registers itself as a Coldbox helper method so you can call it in your handlers, layouts, and views by simply calling `mixr()`.
+- **Vite** (production manifests + dev server hot reload)
+- **Laravel Mix** (`mix-manifest.json`)
+- **ColdBox Elixir** (`rev-manifest.json`)
+- Any custom flat-key manifest
+
+It registers a global `mixr()` helper available in every handler, layout, view,
+and interceptor.
+
+---
 
 ## Installation
-
-Install Mixr using CommandBox:
 
 ```bash
 box install mixr
 ```
 
-## Configuration
+---
 
-Configure Mixr in your Coldbox `config/Coldbox.cfc` file:
+## Quick start
+
+### Vite (3.0)
+
+`config/Coldbox.cfc`:
 
 ```js
 moduleSettings = {
-    // default configuration designed to emulate Laravel Mix 6
     mixr: {
-        "manifestPath" = "/includes/mix-manifest.json",
-        "prependModuleRoot" = true,
-        "prependPath" = "/includes",
-        "modules": {}
+        driver       : "vite",       // or "auto"
+        manifestPath : "/includes/build/.vite/manifest.json",
+        buildPath    : "/includes/build",
+        hotFilePath  : "/includes/hot",
+        devMode      : getSystemSetting( "ENVIRONMENT", "production" ) eq "development"
     }
 };
 ```
 
-The above configuration will work in a ColdBox app that uses Laravel 6 to generate asset manifests.  If you are using Coldbox Elixir, you will need to change the configuration to match the conventions of your asset bundler.  See the [Upgrade Guide](#upgrade-guide) for more information.
+In a layout:
 
-For reference, a Laravel 6 Manifest file might look like this:
-
-```js
-{
-    "/css/app.css": "/css/app.css?id=123",
-    "/js/app.js": "/js/app.js?id=123"
-}
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    #mixr().viteClient()#                              <!-- no-op in prod -->
+    #mixr().tags( "resources/js/app.js" )#             <!-- css + preload + module script -->
+</head>
+<body>...</body>
+</html>
 ```
 
-The same manifest file might look like this when using Coldbox Elixir. You will need to update the default configuration if you are using Coldbox Elixir starting with Mixr version 2.0:
+In dev (when Vite has written `/includes/hot`) Mixr emits dev-server URLs and
+`@vite/client`. In prod it reads `manifest.json` and emits the hashed `<link>`
+and `<script type="module">` tags, with imported chunks preloaded and any CSS
+chunk references included automatically.
 
-```js
-{
-    "includes/js/app.js": "includes/js/app.123.js",
-    "includes/css/app.css": "includes/css/app.123.css"
-}
-``` 
-
-## Upgrade Guide
-
-### Upgrading from 1.x to 2.x
-
-Version 2.0 introduces a **breaking change** where the configuration defaults have been changed to emulate Laravel Mix 6.  If you are upgrading from 1.x to 2.x, and you use Coldbox Elixir, you will need to update your configuration (see examples for details)
-
-## Settings
-
-| Setting | Description | Default |
-| --- | --- | --- |
-| `manifestPath` | (string) The path from the root where your manifest file resides | /includes/mix-manifest.json |
-| `prependModuleRoot` | (boolean) Whether or not to prepend the module root to the path | true |
-| `prependPath` | (string) A path to prepend to the asset path | /includes |
-| `modules` | (struct) A struct of module names so you can pass along custom configs to submodules | {} |
-
-## Submodule Settings
-
-Sometimes a tracked or untracked submodule needs to use its own asset manifest file conventions. For example, if you use Laravel Mix in your main app, but you use Coldbox Elixir in a submodule, you can configure Mixr to use different settings for each submodule.  
-
-### Configure Via Submodule's ModuleConfig.cfc
-
-You can provide module-specific settings to Mixr, just in case some submodules use different conventions.  To do this within a module's `ModuleConfig.cfc` file, add a `mixr` struct to the `configure()` method:
-
-```js
-function configure(){
-    
-    // module settings - we are overriding mixr conventions in this module to emulate Coldbox Elixir
-    variables.settings = {
-        mixr: {
-            "manifestPath": "/includes/rev-manifest.json",
-            "prependModuleRoot": true,
-            "prependPath": "" 
-        }
-    };
-
-}
-```
-
-### Configure Via Coldbox.cfc
-
-Alternatively, you can also configure Mixr in your main `config/Coldbox.cfc` file.  Add any submodule to the `mixr.modules`  in `moduleSettings` like this to override settings:
+### Laravel Mix / ColdBox Elixir / custom (drop-in 2.x replacement)
 
 ```js
 moduleSettings = {
-    // default configuration designed to emulate Coldbox Elixir
     mixr: {
-        "manifestPath" = "/includes/rev-manifest.json",
-        "prependModuleRoot" = true,
-        "prependPath" = "",
-        "modules": {
-            // custom configuration for a submodule to emaulate Laravel Mix V6
-            "fooModule": {
-                "manifestPath": "/includes/mix-manifest.json",
-                "prependModuleRoot": true,
-                "prependPath": "/includes"  
+        driver            : "manifest",
+        manifestPath      : "/includes/mix-manifest.json",
+        prependModuleRoot : true,
+        prependPath       : "/includes"
+    }
+};
+```
+
+```html
+<script src="#mixr( '/js/app.js' )#"></script>
+<link rel="stylesheet" href="#mixr( '/css/app.css' )#">
+```
+
+### Auto-detect (default)
+
+```js
+moduleSettings = { mixr: { driver: "auto" } };
+```
+
+`driver: "auto"` (the default) picks Vite when it sees a hot file or a Vite-
+shaped manifest, and falls back to the flat-manifest driver otherwise. This
+makes Mixr safe to install in an app that hasn't decided yet.
+
+---
+
+## The `mixr()` helper
+
+Three call shapes:
+
+```cfm
+<!-- 1. Fluent, current module -->
+#mixr().path( "resources/js/app.js" )#
+#mixr().tags( "resources/js/app.js" )#
+#mixr().viteClient()#
+#mixr().isHot()#
+
+<!-- 2. Fluent, explicit module -->
+#mixr( moduleName = "admin" ).tags( "resources/js/admin.js" )#
+
+<!-- 3. Legacy 2.x string form -->
+#mixr( "/js/app.js" )#
+#mixr( "/js/admin.js", "admin" )#
+```
+
+When `moduleName` is omitted, Mixr auto-detects the module handling the current
+request, so submodule configs are picked up without any extra wiring.
+
+### Methods on the fluent scope
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `path( entry )` | `string` | Resolved URL for a single entry. |
+| `tags( entry )` | `string` | Full `<link>` / `<script>` HTML. Vite: aggregates CSS + module preloads. Manifest: single `<script>` or `<link>` based on extension. |
+| `bundle( entry )` | `struct` | `{ entry, css[], preload[], devUrl, hot }`. Use when you need to render tags yourself. |
+| `viteClient()` | `string` | `<script type="module" src=".../@vite/client"></script>`. Empty in prod. Deduped per request. |
+| `isHot()` | `boolean` | True when the Vite dev server hot file exists. |
+| `refresh()` | `void` | Clears caches for this module. Useful in tests. |
+
+The legacy service method `mixr().get( asset )` is preserved as an alias for
+`path()`.
+
+---
+
+## Configuration
+
+All settings, with defaults:
+
+```js
+mixr = {
+    // "vite" | "manifest" | "auto"
+    driver              : "auto",
+
+    // Vite (also used by auto-detection)
+    manifestPath        : "/includes/build/.vite/manifest.json",
+    buildPath           : "/includes/build",
+    hotFilePath         : "/includes/hot",
+    devServerUrl        : "",                 // fallback when hot file is empty
+    devMode             : false,              // turn on hot-file polling
+    renderModulePreload : true,               // emit <link rel="modulepreload">
+    includeImportedCss  : true,               // walk imported chunks for .css
+
+    // Manifest driver (Mix / Elixir / custom) — preserved from 2.x
+    prependModuleRoot   : true,
+    prependPath         : "/includes",
+
+    // Caching
+    cache : {
+        enabled          : true,
+        // devMode hot-file recheck:
+        //   0  -> recheck every request
+        //   N  -> throttle to once per N ms
+        //  -1  -> never recheck (treat dev like prod)
+        devCheckInterval : 2000
+    },
+
+    // Per-submodule overrides (see below)
+    modules : {}
+};
+```
+
+### Per-submodule configuration
+
+Two equivalent ways. Pick whichever fits the codebase.
+
+**A. From the submodule itself** — add a `mixr` key to the module's
+`variables.settings` in its `ModuleConfig.cfc`:
+
+```js
+// modules_app/admin/ModuleConfig.cfc
+function configure(){
+    settings = {
+        mixr: {
+            driver       : "vite",
+            manifestPath : "/includes/build/.vite/manifest.json",
+            buildPath    : "/includes/build"
+        }
+    };
+}
+```
+
+**B. From the host app** — declare overrides under
+`mixr.modules.<moduleName>` in `config/Coldbox.cfc`:
+
+```js
+moduleSettings = {
+    mixr: {
+        driver  : "manifest",
+        modules : {
+            admin: {
+                driver       : "vite",
+                manifestPath : "/includes/build/.vite/manifest.json"
+            },
+            blog: {
+                manifestPath : "/includes/rev-manifest.json",
+                prependPath  : ""
             }
         }
     }
 };
 ```
 
+Settings cascade: explicit call args win → submodule overrides → root settings →
+defaults.
 
-## Usage
+---
 
-To return an asset path, simply call `mixr()` in your views, layouts, or handlers like this:
-```html
-// load javascript asset
-<script src="#mixr( '/js/app.js' )#"></script>
-// load css assset
-<script src="#mixr( '/css/app.css' )#"></script>
-```
+## How Vite mode works
 
-#### Method Arguments
+In **production** (`isHot() == false`):
 
-`mixr()` accepts the following arguments:
+1. Mixr reads `manifestPath` once and caches the parsed JSON.
+2. For each call, it looks up the entry, then walks `imports[]` recursively to
+   collect every CSS chunk (when `includeImportedCss` is true) and every
+   imported JS chunk for `<link rel="modulepreload">`.
+3. `tags()` returns:
+   ```html
+   <link rel="stylesheet" href="/includes/build/assets/app.abc123.css">
+   <link rel="modulepreload" href="/includes/build/assets/vendor.def456.js">
+   <script type="module" src="/includes/build/assets/app.789xyz.js"></script>
+   ```
 
-| Agument | Description | Default |  
-| --- | --- | --- |
-| `asset`* | (string) The path to the asset as it exists in the manifest file | "" |
-| `moduleName` | (string) module name where the manifest file is located | [currentModuleName] |
-| `manifestPath` | (string) The path from the root of the module where the manifest file resides | [config.manifestPath] |
-| `prependModuleRoot` | (boolean) Whether or not to prepend the module root to the path | [config.prependModuleRoot] |
-| `prependPath` | (string) A path to prepend to the asset path | [config.prependPath] |
+In **development** (`devMode = true` and `/includes/hot` exists):
 
-Mixr automatically attempts to figure out which module the request is coming from and will prepend the module root to the path if `prependModuleRoot` is set to `true`.
+1. The hot file content is treated as the dev server URL (Vite writes this on
+   `vite dev` startup). `devServerUrl` is used as a fallback.
+2. `viteClient()` emits `<script type="module" src="<devUrl>/@vite/client"></script>`
+   (deduped per request).
+3. `tags()` emits a single `<script type="module" src="<devUrl>/<entry>">`.
 
-### Examples
+Hot-file polling is throttled by `cache.devCheckInterval` so it isn't a per-
+request disk hit.
 
-#### Coldbox Elixir
+---
 
-```js
-// config/Coldbox.cfc
-mixr = {
-    "manifestPath": "/includes/rev-manifest.json",
-    "prependModuleRoot": true,
-    "prependPath": "",
-    "modules": {}
-}
-```
+## Performance notes
 
-#### Laravel Mix
+Mixr is built to be called many times per page render:
 
-No need to change any defaults. It should work out of the box. Here is the configuration, just in case you need to change it:
+- The singleton service caches one **driver** per module — first call resolves
+  config and instantiates a driver, every later call is a struct lookup.
+- A bound `MixrScope` is also cached per module — `mixr()` is constant-time
+  after warmup.
+- Each driver caches resolved paths, parsed manifests, and rendered tag bundles.
+- `helpers/Mixins.cfm` caches the WireBox lookup in `variables.mixrService`.
 
-```js
-// configure mixr to use laravel mix conventions
-mixr = {
-    "manifestPath": "/includes/mix-manifest.json",
-    "prependModuleRoot": true,
-    "prependPath": "/includes",
-    "modules": {}
-}
-```
+---
 
-#### Custom Asset Bundler
+## Upgrade guide
 
-```js
-// custom maifest file located in /dist/custom-manifest.json
-{
-    "js/app.js": "js/app.12345678.js",
-    "css/app.css": "css/app.87654321.css"
-}
-```
+### 2.x → 3.0
 
-```js
-mixr = {
-    "manifestPath": "/dist/custom-manifest.json",
-    "prependModuleRoot": true,
-    "prependPath": "dist", // prepend the 'dist' folder to the path
-    "modules": {}
-}
-```
+3.0 is **non-breaking for the legacy string form**. Existing apps that call
+`mixr( "/js/app.js" )` continue to work without configuration changes — the
+default `driver: "auto"` falls back to the flat-manifest driver when no Vite
+manifest or hot file is present.
 
-## Why Mixr?
+What changed:
 
-Why Does Coldbox need another asset helper?  Here are a few reasons why Mixr is a great choice for your Coldbox app: 
+- New `driver` setting: `"vite" | "manifest" | "auto"` (default `auto`).
+- New Vite settings: `buildPath`, `hotFilePath`, `devServerUrl`, `devMode`,
+  `renderModulePreload`, `includeImportedCss`, `cache.devCheckInterval`.
+- New fluent API: `mixr().path()`, `mixr().tags()`, `mixr().viteClient()`,
+  `mixr().isHot()`, `mixr().bundle()`, `mixr().refresh()`.
+- The default `manifestPath` for Vite is `/includes/build/.vite/manifest.json`.
+  If you're upgrading a Mix or Elixir app and want auto-detect, leave the
+  manifest setting pointing at your existing manifest:
+  ```js
+  mixr = {
+      driver       : "manifest",   // or "auto"
+      manifestPath : "/includes/mix-manifest.json"
+  };
+  ```
+- `mixr()` now also accepts an explicit `moduleName` argument (preserved from
+  2.x) and a no-asset fluent form. Old call sites are unaffected.
 
- - Coldbox Elixir is a great asset helper, but it is not flexible enough to work with other asset bundlers like Laravel Mix.  Mixr is designed to work with any asset bundler that generates a manifest file. 
- - Mixr registers itself as a Coldbox helper method, so it can automatically detect which module you are in any time you call `mixr()`
- - Calling `mixr()` is quick and easy, and will keep your source code nice and clean.
- - You can configure different settings for each submodule giving you maximum control over your assets and manifest files.
+### 1.x → 2.x
 
+(Unchanged from 2.0.) Defaults switched to Laravel Mix 6 conventions; ColdBox
+Elixir users must set `manifestPath`, `prependPath` explicitly.
 
- ## Roadmap:
+---
 
- - Integration tests: I currently have unit tests in place, but would like to set up some better real-world testing for this module.
+## Testing
 
-## About the Author:
-
-This module was passionately developed by [Angry Sam Productions](https://www.angrysam.com), a web development company based in California. We believe creating and contributing open source software strenghens the development community and makes the world a better place.  If you would like to learn more about our company or hire us for your next project, please [contact us](https://www.angrysam.com/).
-
-## Running Tests
-
-To run the tests, simply run the following command from the root of the project in Commandbox:
-`start server-lucee@5.json` (or whichever server JSON you want to use)
-`server open` (to open the server in your browser)
-navigate to `/tests/runner.cfm` in your browser
+Mixr ships a full test harness covering 5 CFML engines.
 
 ```bash
+box run-script install:dependencies
+
+box run-script start:lucee5    # or :lucee6, :2018, :2021, :2023
+box server open
+# navigate to /tests/runner.cfm
+```
+
+Run a single bundle:
+
+```
+http://localhost:60299/tests/runner.cfm?bundles=tests.specs.unit.drivers.ViteDriverTest
+```
+
+The 3.0 release passes 40/40 specs on Lucee 5.4.8.2, Lucee 6.2.6.19, Adobe
+ColdFusion 2018, 2021, and 2023.
+
+---
+
+## About the author
+
+Mixr is developed by [Angry Sam Productions](https://www.angrysam.com).
+Pull requests, issues, and ideas welcome.

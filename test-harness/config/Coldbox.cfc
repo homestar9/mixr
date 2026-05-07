@@ -72,9 +72,17 @@
 
         moduleSettings = {
             mixr = {
+                // Harness root simulates a Laravel Mix app
+                "driver"            : "manifest",
+                "manifestPath"      : "/tests/resources/mix-manifest.json",
+                "prependModuleRoot" : false,
+                "prependPath"       : "",
                 "modules": {
                     "fooModule": {
-                        "prependPath": "/includes/"
+                        "driver"            : "manifest",
+                        "manifestPath"      : "/public/mix-manifest.json",
+                        "prependModuleRoot" : true,
+                        "prependPath"       : "/includes"
                     }
                 }
             }

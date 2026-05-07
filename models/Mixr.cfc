@@ -1,200 +1,335 @@
-component 
-    extends = "coldbox.system.FrameworkSupertype"
-    hint="I am the mixr service."
-    singleton
+/**
+ * Mixr 3.0
+ *
+ * Public facade. Resolves the appropriate driver for a given module (Vite,
+ * flat manifest, or auto) and delegates path/tag rendering to it.
+ *
+ * Drivers are instantiated lazily and pinned per moduleName for the life of
+ * the application — the only per-request work after warmup is a struct
+ * lookup and a delegate call.
+ */
+component
+	hint      = "Mixr facade — manifest + Vite asset helper"
+	singleton
 {
 
-    property name="settings" inject="coldbox:moduleSettings:mixr";
-    property name="controller" inject="coldbox";
+	property name="settings"   inject="coldbox:moduleSettings:mixr";
+	property name="controller" inject="coldbox";
+	property name="wirebox"    inject="wirebox";
 
+	// drivers keyed by moduleName ("" for root)
+	variables._drivers = {};
+	// bound scopes keyed by moduleName
+	variables._scopes  = {};
 
-    // this will hold a reference to all manifest maps
-    variables._manifests = {}; 
-    variables._rootSettings = {};
-    variables._cachedPaths = {};
+	// support singletons (lazy)
+	variables._store    = "";
+	variables._watcher  = "";
+	variables._renderer = "";
 
+	/**
+	 * Constructor. Mixr is a singleton; WireBox calls this once at boot.
+	 */
+	Mixr function init() {
+		return this;
+	}
 
-    /**
-     *  Constructor
-     */ 
-    Mixr function init() {
-        return this;
-    }
+	/* ------------------------------------------------------------------ */
+	/*  Public API                                                        */
+	/* ------------------------------------------------------------------ */
 
+	/**
+	 * Returns a module-bound scope for fluent calls: mixr().path(...) etc.
+	 * Scopes are cached per moduleName, so repeated calls are O(1).
+	 *
+	 * @moduleName Name of the ColdBox module to bind the scope to. Use "" (default) for the root app.
+	 */
+	any function forModule( string moduleName = "" ) {
+		var key = arguments.moduleName;
+		if ( !variables._scopes.keyExists( key ) ) {
+			variables._scopes[ key ] = wirebox.getInstance(
+				name           = "MixrScope@mixr",
+				initArguments  = { service: this, moduleName: key }
+			);
+		}
+		return variables._scopes[ key ];
+	}
 
-    /**
-     * Get
-     * Returns the mapped path of the asset based on a manifest file
-     * 
-     * @asset the asset to look for in the manifest file. it must be an exact match
-     * @moduleName the name of the module containing the asset (used when getting custom settings)
-     * @manifestPath the path inside the module where the manfest file is including filename
-     * @moduleRoot the path to the root of the module
-     * @prependModuleRoot whether the module root path should be prepended to the final output
-     * @prependPath anything you want prepeneded to the asset path just after the module root
-     */
-    string function get( 
-        required string asset, 
-        string moduleName = "",
-        string manifestPath,
-        string moduleRoot = "",
-        boolean prependModuleRoot,
-        string prependPath
-    ) {
-        
-        var argumentsHash  = hash( serializeJSON( arguments ) );
-        
-        // In local cache
-		if ( variables._cachedPaths.keyExists( argumentsHash ) ) {
-			return variables._cachedPaths[ argumentsHash ];
+	/**
+	 * Resolve a single asset to its real, hashed URL.
+	 *
+	 * @entry      Logical entry path (Vite source key, e.g. "resources/js/app.js", or flat-manifest key like "/js/app.js").
+	 * @moduleName Module to resolve from. Defaults to root app when omitted.
+	 * @options    Driver-specific overrides (rarely used). See driver docs.
+	 */
+	string function path( required string entry, string moduleName = "", struct options = {} ) {
+		return driverFor( arguments.moduleName ).path( arguments.entry, arguments.options );
+	}
+
+	/**
+	 * Render the full HTML tag set for an entry: <link>/<script> for the manifest
+	 * driver; <link rel="stylesheet">/<link rel="modulepreload">/<script type="module">
+	 * for Vite (or a single dev-server <script> when hot).
+	 *
+	 * @entry      Logical entry path.
+	 * @moduleName Module to resolve from. Defaults to root app when omitted.
+	 * @options    Optional struct: { as, attributes, renderModulePreload, includeImportedCss }.
+	 */
+	string function tags( required string entry, string moduleName = "", struct options = {} ) {
+		return driverFor( arguments.moduleName ).tags( arguments.entry, arguments.options );
+	}
+
+	/**
+	 * Return a normalized bundle struct ({ js, css[], preload[] }) for an entry.
+	 * Use when you need to render tags yourself rather than use tags().
+	 *
+	 * @entry      Logical entry path.
+	 * @moduleName Module to resolve from. Defaults to root app when omitted.
+	 * @options    Optional struct: { renderModulePreload, includeImportedCss }.
+	 */
+	struct function bundle( required string entry, string moduleName = "", struct options = {} ) {
+		return driverFor( arguments.moduleName ).bundle( arguments.entry, arguments.options );
+	}
+
+	/**
+	 * True when the active driver detects a Vite dev server (hot file present and devMode=true).
+	 * Always false for the manifest driver.
+	 *
+	 * @moduleName Module whose driver should be queried. Defaults to root app.
+	 */
+	boolean function isHot( string moduleName = "" ) {
+		return driverFor( arguments.moduleName ).isHot();
+	}
+
+	/**
+	 * Renders <script type="module" src="…/@vite/client"></script>, but only
+	 * once per request. Returns "" in production or after the first render.
+	 * Per-request dedupe uses RequestContext private values; outside a request
+	 * (e.g. scheduled tasks) the caller is responsible for not double-rendering.
+	 *
+	 * @moduleName Module whose driver should provide the dev URL. Defaults to root app.
+	 */
+	string function viteClient( string moduleName = "" ) {
+		var driver = driverFor( arguments.moduleName );
+		if ( !driver.isHot() ) return "";
+
+		// per-request dedupe
+		try {
+			var event = controller.getRequestService().getContext();
+			var flag  = "mixr:viteClientRendered:" & arguments.moduleName;
+			if ( event.privateValueExists( flag ) ) return "";
+			event.setPrivateValue( flag, true );
+		} catch ( any e ) {
+			// outside a request (scheduled task, etc.) — fall through; caller
+			// is responsible for not double-rendering.
 		}
 
-        // If this isn't the root module, we have some extra processing to do
-        if ( len( arguments.moduleName ) ) {
+		return driver.viteClient();
+	}
 
-            // if the moduleroot isn't defined, have coldbox calculate it.
-            if ( !len( arguments.moduleRoot ) ) {
-                arguments.moduleRoot = controller.getRequestService().getContext().getModuleRoot( arguments.moduleName );
-            }
+	/**
+	 * Backward-compatible 2.x method. Resolves a single asset path via the
+	 * effective driver. Vite users should prefer path().
+	 *
+	 * @asset      Logical asset path (manifest key).
+	 * @moduleName Module to resolve from. Defaults to root app when omitted.
+	 */
+	string function get( required string asset, string moduleName = "" ) {
+		return path( arguments.asset, arguments.moduleName );
+	}
 
-            // if mixr doesn't have settings for this module yet, create them
-            if ( !settings.modules.keyExists( arguments.moduleName ) ) {
-                var moduleSettings = getModuleSettings( arguments.moduleName );
-                if ( moduleSettings.keyExists( "mixr" ) ) {
-                    settings.modules[ arguments.moduleName ] = moduleSettings.mixr;
-                } else {
-                    settings.modules[ arguments.moduleName ] = {};
-                }
-            }
+	/**
+	 * Drop all caches for one module (or all modules). Useful in tests and
+	 * dev workflows that need to force a re-read after editing a manifest
+	 * within the same app boot. Also resets the parsed-manifest store and
+	 * the hot-file watcher.
+	 *
+	 * @moduleName Specific module to refresh. Empty string (default) refreshes everything.
+	 */
+	function refresh( string moduleName = "" ) {
+		if ( len( arguments.moduleName ) ) {
+			structDelete( variables._drivers, arguments.moduleName );
+			structDelete( variables._scopes,  arguments.moduleName );
+		} else {
+			variables._drivers = {};
+			variables._scopes  = {};
+		}
+		// also nuke parsed manifests + hot state so the next call hits disk
+		getStore().refresh();
+		getWatcher().refresh();
+	}
 
-        }
-        
-        applyDefaults( arguments );
-        var manifest = getManifest( arguments.moduleRoot & "/" & arguments.manifestPath );
+	/* ------------------------------------------------------------------ */
+	/*  Driver resolution                                                 */
+	/* ------------------------------------------------------------------ */
 
-        if ( !manifest.keyExists( arguments.asset ) ) {
-            throw( 
-                message = "Asset file not found in manifest", 
-                type = "ManifestAssetNotFound", 
-                detail = "Looked for #arguments.asset# in manifest file #arguments.manifestPath# for module #arguments.moduleName#" 
-            );
-        }
+	/**
+	 * Resolve (and cache) the driver instance bound to a module. After the
+	 * first call for a given moduleName, this is a struct lookup.
+	 *
+	 * @moduleName Module name; "" for the root app.
+	 */
+	private any function driverFor( required string moduleName ) {
+		var key = arguments.moduleName;
+		if ( variables._drivers.keyExists( key ) ) return variables._drivers[ key ];
 
-        variables._cachedPaths[ argumentsHash ] = buildPath(
-            asset = manifest[ asset ],
-            moduleRoot = arguments.moduleRoot,
-            prependModuleRoot = arguments.prependModuleRoot,
-            prependPath = arguments.prependPath
-        );
+		// Resolve effective settings + module root for this call site.
+		var effective = effectiveSettings( arguments.moduleName );
+		var moduleRoot = "";
+		if ( len( arguments.moduleName ) ) {
+			moduleRoot = controller.getRequestService().getContext().getModuleRoot( arguments.moduleName );
+		}
 
-        return variables._cachedPaths[ argumentsHash ];
+		var driverName = resolveDriverName( effective, moduleRoot );
+		var mapping = ( driverName == "vite" ) ? "ViteDriver@mixr" : "ManifestDriver@mixr";
 
-    }
+		var driver = wirebox.getInstance(
+			name          = mapping,
+			initArguments = {
+				settings:   effective,
+				moduleRoot: moduleRoot,
+				store:      getStore(),
+				watcher:    getWatcher(),
+				renderer:   getRenderer()
+			}
+		);
 
-    /**
-     * buildPath
-     * Assembles the final output path based on passed preferences/arguments
-     *
-     * @asset the asset from the manifest file
-     * @moduleRoot the module rooth path
-     * @prependModuleRoot whether we should prepend the module root
-     * @prependPath anything else we want added just before the asset path and after the module root
-     */
-    private function buildPath(
-        required string asset,
-        required string moduleRoot,
-        required boolean prependModuleRoot,
-        required string prependPath
-    ) {
-        return ( prependModuleRoot ? moduleRoot : '' ) & prependPath & asset;
-    }
+		variables._drivers[ key ] = driver;
+		return driver;
+	}
 
-    /**
-     * Applies any defaults to the settings
-     *
-     * @args the arguments to check and apply module defaults to
-     */
-    private function applyDefaults( required struct args ) {
+	/**
+	 * Build the effective settings struct for one module by cascading
+	 * explicit module settings onto the root settings. The 'modules' key is
+	 * never inherited. Submodule settings are lazy-loaded the first time
+	 * a moduleName is seen.
+	 *
+	 * @moduleName Module name; "" returns root settings only.
+	 */
+	private struct function effectiveSettings( required string moduleName ) {
+		var base = duplicate( settings );
+		structDelete( base, "modules" );
 
-        settings.each( function( key, value ) {
-            
-            // if this is the modules setting, or if the setting already exists in the args, skip it.
-            if ( key == "modules" || args.keyExists( key ) ) {
-                return;
-            }
+		// merge cache substruct defaults
+		if ( !base.keyExists( "cache" ) || !isStruct( base.cache ) ) {
+			base.cache = { enabled: true, devCheckInterval: 2000 };
+		} else {
+			if ( !base.cache.keyExists( "enabled" ) )          base.cache.enabled = true;
+			if ( !base.cache.keyExists( "devCheckInterval" ) ) base.cache.devCheckInterval = 2000;
+		}
 
-            // assert: argument is missing, look for a module setting
-            if ( 
-                len( args.moduleName ) && 
-                settings.modules.keyExists( args.moduleName ) && 
-                settings.modules[ args.moduleName ].keyExists( key )
-            ) {
-                args[ key ] = settings.modules[ args.modulename ][ key ];
-                return;
-            }
+		if ( !len( arguments.moduleName ) ) return base;
 
-            // inherit setting from the root
-            args[ key ] = value;
+		// lazy-load the submodule's own ModuleConfig.cfc settings
+		if ( !settings.modules.keyExists( arguments.moduleName ) ) {
+			var moduleSettings = wirebox.getInstance( dsl = "coldbox:moduleSettings:#arguments.moduleName#" );
+			settings.modules[ arguments.moduleName ] = moduleSettings.keyExists( "mixr" ) ? moduleSettings.mixr : {};
+		}
 
-        } );
+		var override = settings.modules[ arguments.moduleName ];
+		for ( var key in override ) {
+			if ( key == "modules" ) continue;
+			if ( key == "cache" && isStruct( override.cache ) ) {
+				structAppend( base.cache, override.cache, true );
+				continue;
+			}
+			base[ key ] = override[ key ];
+		}
 
-    }   
+		return base;
+	}
 
-    /**
-     * getManifest
-     * Returns the manifest struct
-     *
-     * @manifestPath the path to the manifest file
-     */
-    private struct function getManifest( required string manifestPath ) {
+	/**
+	 * Pick which driver class to use for a (settings, moduleRoot) pair:
+	 *   "vite"     -> ViteDriver
+	 *   "manifest" -> ManifestDriver
+	 *   "auto"     -> Vite if hot file present OR manifest looks like Vite shape; else manifest
+	 *
+	 * @settings   Effective settings struct for the module.
+	 * @moduleRoot Filesystem-relative module root, used to resolve hot/manifest paths.
+	 */
+	private string function resolveDriverName( required struct settings, required string moduleRoot ) {
+		var declared = lcase( arguments.settings.keyExists( "driver" ) ? arguments.settings.driver : "auto" );
+		if ( declared == "vite" || declared == "manifest" ) return declared;
+		if ( declared != "auto" ) {
+			throw(
+				message = "Unknown Mixr driver '#declared#'",
+				type    = "InvalidDriver",
+				detail  = "Expected one of: vite, manifest, auto"
+			);
+		}
 
-        // remove duplicate slashes and ensure the path starts with a forward slash
-        arguments.manifestPath = "/" & cleanPath( manifestPath ); 
+		// Auto: hot file beats everything
+		var hotKey = arguments.settings.keyExists( "hotFilePath" ) ? arguments.settings.hotFilePath : "/includes/hot";
+		var hotPath = expandPath( joinPath( arguments.moduleRoot, hotKey ) );
+		if ( fileExists( hotPath ) ) return "vite";
 
-        // if the file isn't cached
-        if ( !variables._manifests.keyExists( arguments.manifestPath ) ) {
+		// Otherwise sniff the manifest
+		var manifestAbs = expandPath( joinPath( arguments.moduleRoot, arguments.settings.manifestPath ) );
+		if ( !fileExists( manifestAbs ) ) {
+			throw(
+				message = "Mixr could not auto-detect driver: no manifest found",
+				type    = "ManifestNotFound",
+				detail  = "Checked #manifestAbs#. Set 'driver' explicitly or provide a manifest."
+			);
+		}
+		try {
+			var sample = deserializeJson( fileRead( manifestAbs ) );
+		} catch ( any e ) {
+			throw(
+				message = "Manifest JSON is malformed",
+				type    = "MalformedManifest",
+				detail  = manifestAbs & " — " & e.message
+			);
+		}
+		// Vite manifests have struct values with a 'file' key
+		for ( var k in sample ) {
+			if ( isStruct( sample[ k ] ) && sample[ k ].keyExists( "file" ) ) return "vite";
+			break;
+		}
+		return "manifest";
+	}
 
-            // race condition double lock-check technique
-            lock
-                name="mixr"
-                type="exclusive"
-                timeout=30
-            {
-                if ( !variables._manifests.keyExists( arguments.manifestPath ) ) {
-                    variables._manifests[  arguments.manifestPath ] = importManifestFile( arguments.manifestPath );
-                }
-            }
+	/* ------------------------------------------------------------------ */
+	/*  collaborators                                                     */
+	/* ------------------------------------------------------------------ */
 
-        }
-        
-        return variables._manifests[ manifestPath ];
+	/**
+	 * Lazy-resolve the singleton ManifestStore.
+	 */
+	private any function getStore() {
+		if ( isSimpleValue( variables._store ) ) variables._store = wirebox.getInstance( "ManifestStore@mixr" );
+		return variables._store;
+	}
 
-    }
+	/**
+	 * Lazy-resolve the singleton HotFileWatcher.
+	 */
+	private any function getWatcher() {
+		if ( isSimpleValue( variables._watcher ) ) variables._watcher = wirebox.getInstance( "HotFileWatcher@mixr" );
+		return variables._watcher;
+	}
 
-    private struct function importManifestFile( manifestPath ) {
-        
-        var expandedPath = expandPath( arguments.manifestPath );
-        
-        if ( !fileExists( expandedPath )  ) {
-            throw( 
-                message = "manifest file not found", 
-                type = "ManifestNotFound", 
-                detail = "Checked #expandedPath#" 
-            );
-        }
+	/**
+	 * Lazy-resolve the singleton TagRenderer.
+	 */
+	private any function getRenderer() {
+		if ( isSimpleValue( variables._renderer ) ) variables._renderer = wirebox.getInstance( "TagRenderer@mixr" );
+		return variables._renderer;
+	}
 
-        return deserializeJson( fileRead( expandedPath ) );
-    }
-
-    /**
-     * cleanPath
-     * converts multiple // to a single /
-     * also removes leading / because we force it later on
-     * 
-     * @path the path to clean
-     */
-    private function cleanPath( required string path ) {
-        return reReplace( reReplace( arguments.path, "\/\/+", "/", "ALL" ), "^//?", "" );
-    }
+	/**
+	 * Join two path segments with a single slash, collapse duplicates, and
+	 * ensure a leading slash.
+	 *
+	 * @base Leading path segment (may be empty).
+	 * @sub  Trailing path segment.
+	 */
+	private string function joinPath( required string base, required string sub ) {
+		var combined = arguments.base & "/" & arguments.sub;
+		combined = reReplace( combined, "/{2,}", "/", "all" );
+		if ( !combined.startsWith( "/" ) ) combined = "/" & combined;
+		return combined;
+	}
 
 }

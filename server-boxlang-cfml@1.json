@@ -1,0 +1,32 @@
+{
+    "name":"mixr-adobe@2023",
+    "app":{
+        "serverHomeDirectory":".engine/boxlang-cfml",
+        "cfengine":"boxlang@1"
+    },
+    "web":{
+        "http":{
+            "port":"60299"
+        },
+        "rewrites":{
+            "enable":true
+        },
+        "webroot":"test-harness",
+        "aliases":{
+            "/moduleroot/mixr":"../"
+        }
+    },
+    "JVM":{
+        "heapSize":"768",
+        "javaVersion":"openjdk21_jre",
+        "args":"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=8888"
+    },
+    "openBrowser":false,
+    "cfconfig":{
+        "file":".cfconfig-boxlang.json"
+    },
+    "env":{},
+    "scripts":{
+        "onServerInitialInstall":"install bx-compat-cfml --noSave"
+    }
+}

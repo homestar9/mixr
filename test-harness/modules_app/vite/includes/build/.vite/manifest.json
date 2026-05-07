@@ -1,0 +1,13 @@
+{
+    "resources/js/app.js": {
+        "file": "assets/app-PROD123.js",
+        "src": "resources/js/app.js",
+        "isEntry": true,
+        "imports": [ "_vendor-VEND456.js" ],
+        "css": [ "assets/app-PROD123.css" ]
+    },
+    "_vendor-VEND456.js": {
+        "file": "assets/vendor-VEND456.js",
+        "css": [ "assets/vendor-VEND456.css" ]
+    }
+}
