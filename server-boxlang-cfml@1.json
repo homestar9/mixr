@@ -1,8 +1,11 @@
 {
-    "name":"mixr-adobe@2023",
+    "name":"mixr-boxlang@1",
     "app":{
         "serverHomeDirectory":".engine/boxlang-cfml",
         "cfengine":"boxlang@1"
+    },
+    "fusionreactor":{
+        "enable":false
     },
     "web":{
         "http":{
@@ -23,7 +26,7 @@
     },
     "openBrowser":false,
     "cfconfig":{
-        "file":".cfconfig-boxlang.json"
+        "file":".cfconfig.json"
     },
     "env":{},
     "scripts":{
