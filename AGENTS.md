@@ -194,3 +194,7 @@ The 3.0 release is non-breaking for the 2.x string form of `mixr()`. Specificall
 ## Branch context
 
 The default working branch follows GitFlow (`develop` integration, `master` releases). Current focus is the 3.0 release on `feature/add-vite-support`.
+
+## Code Formatting
+
+Do not run `run-script format` or `cfformat` on the codebase. I will run manually.
