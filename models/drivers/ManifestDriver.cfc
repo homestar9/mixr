@@ -125,13 +125,26 @@ component extends="AbstractDriver" {
 	 * Return a normalized bundle struct. The flat-manifest driver has no
 	 * concept of imported chunks, so css and preload are always empty.
 	 *
+	 * `criticalCss` carries the inline CSS body for the resolved event (or ""
+	 * when disabled / in dev / file missing) so callers building their own
+	 * tags have the same data shape as the Vite driver.
+	 *
 	 * @entry   Manifest source key.
-	 * @options Reserved for future use; ignored by this driver.
+	 * @options { criticalEvent, skipCritical }.
 	 */
 	struct function bundle( required string entry, struct options = {} ) {
+		var skipCritical  = arguments.options.keyExists( "skipCritical" ) ? !!arguments.options.skipCritical : false;
+		var criticalEvent = arguments.options.keyExists( "criticalEvent" ) ? arguments.options.criticalEvent : "";
+		var crit = ( skipCritical ) ? "" : readCriticalCss( criticalEvent );
+
 		// Manifest driver has no concept of imported chunks; return a minimal
 		// shape so callers using bundle() don't have to special-case.
-		return { js: path( arguments.entry ), css: [], preload: [] };
+		return {
+			js: path( arguments.entry ),
+			css: [],
+			preload: [],
+			criticalCss: crit
+		};
 	}
 
 	/**

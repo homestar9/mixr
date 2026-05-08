@@ -124,52 +124,78 @@ component extends="AbstractDriver" {
 
 	/**
 	 * Walk the manifest graph for an entry and collect:
-	 *   - js:      the entry's compiled file
-	 *   - css:     the entry's css plus css from any (recursively) imported chunks
-	 *   - preload: imported chunk JS files (for <link rel="modulepreload">)
+	 *   - js:          the entry's compiled file
+	 *   - css:         the entry's css plus css from any (recursively) imported chunks
+	 *   - preload:     imported chunk JS files (for <link rel="modulepreload">)
+	 *   - criticalCss: inline CSS body for the current event (or "" — see below)
+	 *
+	 * The `criticalCss` field obeys the same rules as `readCriticalCss()`:
+	 * empty when `criticalCss.enabled` is false, in dev, when no event is
+	 * provided, or when the per-event file is missing. It is **not** stored in
+	 * `_bundles` — manifest-derived parts cache as before, but `criticalCss` is
+	 * read fresh on each call (already mtime-throttled inside the driver's
+	 * `_criticalCache`). Use `options.markRendered` only via the facade's
+	 * `criticalCss()` method — bundle is a pure data shape.
 	 *
 	 * @entry   Vite source key.
-	 * @options { renderModulePreload, includeImportedCss }.
+	 * @options { renderModulePreload, includeImportedCss, criticalEvent, skipCritical }.
 	 */
 	struct function bundle( required string entry, struct options = {} ) {
+		var skipCritical  = arguments.options.keyExists( "skipCritical" ) ? !!arguments.options.skipCritical : false;
+		var criticalEvent = arguments.options.keyExists( "criticalEvent" ) ? arguments.options.criticalEvent : "";
+		var crit = ( skipCritical ) ? "" : readCriticalCss( criticalEvent );
+
 		if ( isHot() ) {
-			// In dev there is no graph; emit just the entry as JS.
+			// In dev there is no graph; emit just the entry as JS. Critical CSS
+			// is unconditionally suppressed in dev (readCriticalCss returns "").
 			return {
 				js: devUrl() & "/" & reReplace( arguments.entry, "^/+", "" ),
 				css: [],
-				preload: []
+				preload: [],
+				criticalCss: crit
 			};
 		}
 
 		var renderPreload = arguments.options.keyExists( "renderModulePreload" ) ? arguments.options.renderModulePreload : variables.settings.renderModulePreload;
 		var includeCss    = arguments.options.keyExists( "includeImportedCss" )  ? arguments.options.includeImportedCss  : variables.settings.includeImportedCss;
 		var cacheKey = "b|" & arguments.entry & "|" & renderPreload & "|" & includeCss;
-		if ( variables._bundles.keyExists( cacheKey ) ) return variables._bundles[ cacheKey ];
 
-		var manifest = getManifest();
-		var node = lookupEntry( arguments.entry );
+		if ( !variables._bundles.keyExists( cacheKey ) ) {
+			var manifest = getManifest();
+			var node = lookupEntry( arguments.entry );
 
-		// NOTE: Adobe CF passes arrays by value, so we wrap mutable collectors
-		// in a struct (which is always by-reference) for cross-engine portability.
-		var cssBag     = { out: [], seen: {} };
-		var preloadBag = { out: [], seen: {} };
+			// NOTE: Adobe CF passes arrays by value, so we wrap mutable collectors
+			// in a struct (which is always by-reference) for cross-engine portability.
+			var cssBag     = { out: [], seen: {} };
+			var preloadBag = { out: [], seen: {} };
 
-		// CSS belonging directly to the entry chunk (and recursively if includeCss)
-		walkCss( node, manifest, cssBag, /*deep*/ includeCss );
+			// CSS belonging directly to the entry chunk (and recursively if includeCss)
+			walkCss( node, manifest, cssBag, /*deep*/ includeCss );
 
-		// modulepreload list from imported chunks
-		if ( renderPreload ) {
-			walkPreload( node, manifest, preloadBag );
+			// modulepreload list from imported chunks
+			if ( renderPreload ) {
+				walkPreload( node, manifest, preloadBag );
+			}
+
+			variables._bundles[ cacheKey ] = {
+				js: joinPath( variables.settings.buildPath, node.file ),
+				css: cssBag.out.map( ( f ) => joinPath( variables.settings.buildPath, f ) ),
+				preload: preloadBag.out.map( ( f ) => joinPath( variables.settings.buildPath, f ) )
+			};
 		}
 
-		var b = {
-			js: joinPath( variables.settings.buildPath, node.file ),
-			css: cssBag.out.map( ( f ) => joinPath( variables.settings.buildPath, f ) ),
-			preload: preloadBag.out.map( ( f ) => joinPath( variables.settings.buildPath, f ) )
-		};
+		var cached = variables._bundles[ cacheKey ];
 
-		variables._bundles[ cacheKey ] = b;
-		return b;
+		// Stitch criticalCss onto a fresh struct so the cached entry stays
+		// pure manifest-derived data (criticalCss is event-keyed and
+		// mtime-volatile in dev — caching it here would require a more
+		// elaborate invalidation scheme than _bundles supports).
+		return {
+			js:          cached.js,
+			css:         cached.css,
+			preload:     cached.preload,
+			criticalCss: crit
+		};
 	}
 
 	/**

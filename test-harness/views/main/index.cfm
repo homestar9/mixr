@@ -1,5 +1,26 @@
 <cfoutput>
-    <h2>Mixr Tests</h2>
+    
+    <h2>Mixr 3.0 Fluent Chains</h2>
+
+    <!--- path() — single resolved URL string --->
+    <div>
+        #mixr().path( "/css/app.css" )#
+    </div>
+    <!--- bundle() — { js, css[], preload[], criticalCss } --->
+    <div>
+        #writeDump( mixr().bundle( "/css/app.css" ) )#
+    </div>
+    <!--- criticalCss() — just the inline CSS body for the current event --->
+    <cfset critical = mixr().criticalCss()>
+    <cfif len( critical )>
+        <style>#critical#</style>
+    </cfif>
+    <!--- tags() — fully-rendered HTML --->
+    <div>
+        #mixr().tags( "/js/app.js" )#
+    </div>
+
+    <h2>Legacy Mixr 2.0 Tests</h2>
 
     <!--- Assets in this module --->
     <div>
@@ -33,5 +54,9 @@
     <div>
         #mixr( "includes/css/elixir.css", "elixir" )#
     </div>
+
+
+
+
 
 </cfoutput>

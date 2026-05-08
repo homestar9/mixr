@@ -60,10 +60,13 @@ What ColdBox loads. It:
 
 ### Layer 2 — `helpers/Mixins.cfm`
 
-Defines the global `mixr()` UDF. Three call shapes:
+Defines the global `mixr()` UDF. Call shapes:
 
 ```cfml
-mixr().path( "resources/js/app.js" )                      // fluent, current module
+mixr().path( "resources/js/app.js" )                      // fluent, current module — single URL string
+mixr().bundle( "resources/js/app.js" )                    // fluent — { js, css[], preload[], criticalCss } struct
+mixr().tags( "resources/js/app.js" )                      // fluent — fully-rendered HTML
+mixr().criticalCss()                                      // fluent — inline critical CSS body for current event
 mixr( moduleName = "admin" ).tags( "resources/js/admin.js" )  // fluent, explicit module
 mixr( "/js/app.js" )                                       // legacy 2.x string form
 mixr( "/js/admin.js", "admin" )                            // legacy with explicit module
@@ -114,8 +117,10 @@ Backward-compat: `Mixr.get(asset, moduleName)` is preserved as an alias for `pat
 
 **`models/drivers/ViteDriver.cfc`** — Vite manifest. Two modes:
 
-- **Production** (`isHot()==false`): Looks up the entry, walks `imports[]` recursively, collecting `css[]` (when `includeImportedCss`) and imported chunk JS files (when `renderModulePreload`). Returns a normalized bundle: `{ js, css[], preload[] }`. Throws `EntryNotFound`.
+- **Production** (`isHot()==false`): Looks up the entry, walks `imports[]` recursively, collecting `css[]` (when `includeImportedCss`) and imported chunk JS files (when `renderModulePreload`). Returns a normalized bundle: `{ js, css[], preload[], criticalCss }`. Throws `EntryNotFound`.
 - **Dev** (hot file present + `devMode=true`): Skips manifest reads. `path()` returns `<devUrl>/<entry>`; `tags()` emits a single dev-server `<script type="module">`.
+
+**Bundle's `criticalCss` field is stitched outside the `_bundles` cache.** The cache holds only manifest-derived parts (`js`, `css[]`, `preload[]`); each `bundle()` call returns a fresh struct that copies those cached fields and adds a fresh `readCriticalCss()` read. Critical CSS is event-keyed and mtime-volatile in dev — caching it inside `_bundles` would require event/mtime in the cache key. `readCriticalCss()` has its own throttled mtime cache, so the per-call read is cheap.
 
 **Adobe-CF gotcha in `ViteDriver`:** `walkCss` and `walkPreload` accept their collectors as a struct (`bag = { out: [], seen: {} }`) rather than as separate array/struct params. Adobe CF passes arrays by value, so mutations wouldn't propagate; structs are by reference on every engine. Don't refactor those signatures back to bare arrays.
 
@@ -160,6 +165,17 @@ mixr().tags("resources/js/app.js")  [criticalCss.enabled=true, prod, file presen
 
 The diff vs. the standard flow above is: (1) Mixr.tags() resolves the current event and per-request inline-dedupe state before delegating; (2) the driver consults `readCriticalCss()` (which returns `""` when off, in dev, file-missing, or not-yet-warmup); (3) the renderer swaps `viteProductionTags()` for `viteCriticalProductionTags()` when `inlineCss` is non-empty. When the file is missing or `criticalCss.enabled=false`, `inlineCss` is `""` and output falls through byte-for-byte to the standard flow above.
 
+### Critical CSS for callers building their own tags
+
+Callers who reach for `bundle()` (rendering their own `<script>`/`<link>`/`<style>` rather than using `tags()`) have two access points to the inline critical CSS body — symmetrical with what `tags()` produces internally:
+
+1. **`bundle().criticalCss`** — a string field on the bundle struct. Empty when `criticalCss.enabled=false`, in dev, no event, or file missing. Same rules as `readCriticalCss()`. Driven by `options.criticalEvent` (auto-detected from RequestContext when omitted) and `options.skipCritical`.
+2. **`mixr().criticalCss( options )`** — standalone fluent method. Returns the same string without forcing a manifest read. Use when you only want the inline body. Lives on `Mixr.cfc`, `MixrScope.cfc`, and is exposed by `mixr()` via the fluent shape.
+
+**Per-request dedupe is opt-in for these methods.** `tags()` auto-sets `mixr:criticalInlined:#moduleName#` so a second `tags()` call in the same request suppresses its inline. `bundle()` and `criticalCss()` are pure reads by default — they do NOT touch the flag. Callers combining `criticalCss()` (manual rendering) with a later `tags()` call should pass `options.markRendered = true` on the `criticalCss()` call so `tags()` will suppress its inline. The flag is only set when the returned string is non-empty.
+
+The `bundle()` method does NOT accept `markRendered` — bundle is a pure data shape. If you want both the data and the dedupe-mark, call `criticalCss( markRendered: true )` first, then `bundle()`.
+
 ## Test harness layout
 
 `test-harness/` is a complete ColdBox 7 app whose only purpose is to exercise Mixr. Submodules each cover a different config convention/driver:
@@ -190,7 +206,7 @@ Adobe ColdFusion 2021 has a TestBox stub bug where multiple `execute()` calls in
 
 ## Engine support
 
-Verified passing 40/40 specs on:
+Last verified passing 40/40 specs on the 3.0 baseline (pre-`criticalCss` API additions). The new `bundle().criticalCss` and `mixr().criticalCss()` specs add ~17 specs across the unit + integration suites — re-verify counts after running:
 
 - Lucee 5.4.8.2
 - Lucee 6.2.6.19

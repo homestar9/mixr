@@ -151,6 +151,85 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).notToInclude( "<style>" );
 				} );
 			} );
+
+			describe( "bundle().criticalCss", function(){
+				it( "always exposes a criticalCss key (empty by default)", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : ""
+					} );
+					var b = d.bundle( "/tests/asset.js" );
+					expect( b ).toHaveKey( "criticalCss" );
+					expect( b.criticalCss ).toBe( "" );
+					expect( b.css ).toBeEmpty();
+					expect( b.preload ).toBeEmpty();
+				} );
+
+				it( "carries the inline body when enabled and event has a fixture file", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : "",
+						criticalCss       : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var b = d.bundle( "/tests/asset.js", { criticalEvent: "main.index" } );
+					expect( b.criticalCss ).toInclude( ".hero{color:##222" );
+				} );
+
+				it( "is empty when options.skipCritical=true even with a fixture present", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : "",
+						criticalCss       : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var b = d.bundle( "/tests/asset.js", { criticalEvent: "main.index", skipCritical: true } );
+					expect( b.criticalCss ).toBe( "" );
+				} );
+
+				it( "throws MalformedCriticalCss when fixture contains </style>", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : "",
+						criticalCss       : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					expect( () => d.bundle( "/tests/asset.js", { criticalEvent: "bad.injection" } ) )
+						.toThrow( type = "MalformedCriticalCss" );
+				} );
+			} );
+
+			describe( "criticalCss(options) driver method", function(){
+				it( "returns the inline body for the resolved event when enabled", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : "",
+						criticalCss       : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					expect( d.criticalCss( { criticalEvent: "main.index" } ) ).toInclude( ".hero{color:##222" );
+				} );
+
+				it( "returns '' when no event is provided", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : "",
+						criticalCss       : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					expect( d.criticalCss() ).toBe( "" );
+				} );
+
+				it( "returns '' when criticalCss.enabled is false", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : ""
+					} );
+					expect( d.criticalCss( { criticalEvent: "main.index" } ) ).toBe( "" );
+				} );
+			} );
 		} );
 	}
 

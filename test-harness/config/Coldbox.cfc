@@ -77,6 +77,11 @@
                 "manifestPath"      : "/tests/resources/mix-manifest.json",
                 "prependModuleRoot" : false,
                 "prependPath"       : "",
+                "criticalCss" : {
+                    "enabled" : true,                 // OPT-IN
+                    "path"    : "/includes/critical",  // module-relative directory
+                    "suffix"  : ".critical.css"        // appended to event name
+                },
                 "modules": {
                     "fooModule": {
                         "driver"            : "manifest",

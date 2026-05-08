@@ -65,15 +65,34 @@ component {
 	}
 
 	/**
-	 * Return the normalized bundle struct ({ js, css[], preload[] }) for an
-	 * entry through the bound module's driver.
+	 * Return the normalized bundle struct ({ js, css[], preload[], criticalCss })
+	 * for an entry through the bound module's driver.
 	 *
 	 * @entry   Logical entry path.
-	 * @options Optional struct: { renderModulePreload, includeImportedCss }.
+	 * @options Optional struct: { renderModulePreload, includeImportedCss,
+	 *          criticalEvent, skipCritical }.
 	 */
 	struct function bundle( required string entry, struct options = {} ){
 		return variables.service.bundle(
 			entry      = arguments.entry,
+			moduleName = variables.moduleName,
+			options    = arguments.options
+		);
+	}
+
+	/**
+	 * Return the inline critical CSS body for the bound module and current
+	 * (or specified) event. Returns "" when disabled / in dev / event missing
+	 * / file missing. Use when you want the inline content but are rendering
+	 * your own tags rather than calling tags().
+	 *
+	 * Pass `options.markRendered = true` to also set the per-request inline
+	 * dedupe flag so a subsequent tags() call suppresses its own inline.
+	 *
+	 * @options Optional struct: { criticalEvent, skipCritical, markRendered }.
+	 */
+	string function criticalCss( struct options = {} ){
+		return variables.service.criticalCss(
 			moduleName = variables.moduleName,
 			options    = arguments.options
 		);

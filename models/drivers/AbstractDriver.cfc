@@ -94,6 +94,24 @@ component {
 	}
 
 	/**
+	 * Public option-aware accessor for the inline critical CSS body. Honors the
+	 * same `skipCritical` and `criticalEvent` options that `tags()` and
+	 * `bundle()` accept, so the facade can hand options through uniformly.
+	 *
+	 * Returns "" when `skipCritical` is true; otherwise delegates to
+	 * `readCriticalCss( criticalEvent )` (which returns "" when disabled, in
+	 * dev, when the event is empty, or when the file is missing).
+	 *
+	 * @options { criticalEvent, skipCritical }.
+	 */
+	string function criticalCss( struct options = {} ) {
+		var skipCritical  = arguments.options.keyExists( "skipCritical" ) ? !!arguments.options.skipCritical : false;
+		if ( skipCritical ) return "";
+		var criticalEvent = arguments.options.keyExists( "criticalEvent" ) ? arguments.options.criticalEvent : "";
+		return readCriticalCss( criticalEvent );
+	}
+
+	/**
 	 * Read and cache the inline critical CSS contents for a given event.
 	 *
 	 * Returns an empty string when:

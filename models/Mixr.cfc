@@ -122,15 +122,84 @@ component
 	}
 
 	/**
-	 * Return a normalized bundle struct ({ js, css[], preload[] }) for an entry.
-	 * Use when you need to render tags yourself rather than use tags().
+	 * Return a normalized bundle struct ({ js, css[], preload[], criticalCss })
+	 * for an entry. Use when you need to render tags yourself rather than use
+	 * tags().
+	 *
+	 * The `criticalCss` field carries the inline CSS body for the current
+	 * ColdBox event (or "" when disabled / in dev / file missing). The current
+	 * event is auto-detected from the RequestContext; pass
+	 * `options.criticalEvent` to override or `options.skipCritical = true` to
+	 * force it empty. Reading the bundle does NOT set the per-request
+	 * inline-dedupe flag — call `criticalCss( markRendered: true )` if you
+	 * want a later `tags()` call to suppress its inline `<style>`.
 	 *
 	 * @entry      Logical entry path.
 	 * @moduleName Module to resolve from. Defaults to root app when omitted.
-	 * @options    Optional struct: { renderModulePreload, includeImportedCss }.
+	 * @options    Optional struct: { renderModulePreload, includeImportedCss,
+	 *             criticalEvent, skipCritical }.
 	 */
 	struct function bundle( required string entry, string moduleName = "", struct options = {} ) {
-		return driverFor( arguments.moduleName ).bundle( arguments.entry, arguments.options );
+		var opts = duplicate( arguments.options );
+
+		// Inject the current event name when caller didn't override.
+		if ( !opts.keyExists( "criticalEvent" ) ) {
+			try {
+				opts.criticalEvent = controller.getRequestService().getContext().getCurrentEvent();
+			} catch ( any e ) {
+				// Outside a request context (e.g. scheduled task) — leave unset
+				// so drivers fall through to standard rendering.
+				opts.criticalEvent = "";
+			}
+		}
+
+		return driverFor( arguments.moduleName ).bundle( arguments.entry, opts );
+	}
+
+	/**
+	 * Return the inline critical CSS body for the current (or specified)
+	 * event. Returns "" when `criticalCss.enabled` is false, when the driver
+	 * is in dev mode, when no event can be resolved, or when the per-event
+	 * file is missing. Use this when you want the inline content but are
+	 * rendering your own tags (i.e. not calling `tags()`).
+	 *
+	 * Pure read by default — does NOT touch the per-request inline-dedupe
+	 * flag. Pass `options.markRendered = true` to also set the flag, so a
+	 * subsequent `tags()` call in the same request suppresses its inline
+	 * `<style>`. The flag is only set when the returned string is non-empty.
+	 *
+	 * @moduleName Module whose driver should be queried. Defaults to root app.
+	 * @options    Optional struct: { criticalEvent, skipCritical, markRendered }.
+	 */
+	string function criticalCss( string moduleName = "", struct options = {} ) {
+		var opts = duplicate( arguments.options );
+
+		// Inject the current event name when caller didn't override.
+		if ( !opts.keyExists( "criticalEvent" ) ) {
+			try {
+				opts.criticalEvent = controller.getRequestService().getContext().getCurrentEvent();
+			} catch ( any e ) {
+				opts.criticalEvent = "";
+			}
+		}
+
+		var inlineCss = driverFor( arguments.moduleName ).criticalCss( opts );
+
+		// Opt-in dedupe: when caller plans to render the inline themselves,
+		// they can mark the per-request flag so a later tags() call suppresses
+		// its own inline. Only set the flag when there's actually something to
+		// dedupe — empty strings shouldn't suppress anything.
+		var markRendered = opts.keyExists( "markRendered" ) ? !!opts.markRendered : false;
+		if ( markRendered && len( inlineCss ) ) {
+			try {
+				var event = controller.getRequestService().getContext();
+				event.setPrivateValue( "mixr:criticalInlined:" & arguments.moduleName, true );
+			} catch ( any e ) {
+				// Outside a request — caller is responsible for not double-rendering.
+			}
+		}
+
+		return inlineCss;
 	}
 
 	/**

@@ -231,6 +231,102 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).toInclude( "<style>" );
 				} );
 			} );
+
+			describe( "bundle().criticalCss", function(){
+				it( "is empty by default (criticalCss.enabled=false)", function(){
+					var d = buildDriver( { manifestPath : "/tests/resources/vite/manifest-with-imports.json" } );
+					var b = d.bundle( "resources/js/app.js" );
+					expect( b ).toHaveKey( "criticalCss" );
+					expect( b.criticalCss ).toBe( "" );
+				} );
+
+				it( "carries the inline body when enabled and event has a fixture file", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var b = d.bundle( "resources/js/app.js", { criticalEvent: "main.index" } );
+					expect( b.criticalCss ).toInclude( ".hero{color:##222" );
+				} );
+
+				it( "is empty when the event has no critical file", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var b = d.bundle( "resources/js/app.js", { criticalEvent: "missing.event" } );
+					expect( b.criticalCss ).toBe( "" );
+				} );
+
+				it( "is empty when options.skipCritical=true even with a fixture present", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var b = d.bundle( "resources/js/app.js", { criticalEvent: "main.index", skipCritical: true } );
+					expect( b.criticalCss ).toBe( "" );
+				} );
+
+				it( "is empty in dev mode regardless of fixture presence", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						hotFilePath  : "/tests/resources/vite/hot",
+						devMode      : true,
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					expect( d.isHot() ).toBeTrue();
+					var b = d.bundle( "resources/js/app.js", { criticalEvent: "main.index" } );
+					expect( b.criticalCss ).toBe( "" );
+				} );
+
+				it( "throws MalformedCriticalCss when fixture contains </style>", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					expect( () => d.bundle( "resources/js/app.js", { criticalEvent: "bad.injection" } ) )
+						.toThrow( type = "MalformedCriticalCss" );
+				} );
+
+				it( "manifest-derived fields (js/css/preload) remain cached across calls", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var a = d.bundle( "resources/js/app.js", { criticalEvent: "main.index" } );
+					var b = d.bundle( "resources/js/app.js", { criticalEvent: "main.index" } );
+					expect( a.js ).toBe( b.js );
+					expect( a.css ).toBe( b.css );
+					expect( a.preload ).toBe( b.preload );
+					expect( a.criticalCss ).toBe( b.criticalCss );
+				} );
+			} );
+
+			describe( "criticalCss(options) driver method", function(){
+				it( "returns the inline body for the resolved event when enabled", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					expect( d.criticalCss( { criticalEvent: "main.index" } ) ).toInclude( ".hero{color:##222" );
+				} );
+
+				it( "returns '' when skipCritical=true", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					expect( d.criticalCss( { criticalEvent: "main.index", skipCritical: true } ) ).toBe( "" );
+				} );
+
+				it( "returns '' when no event is provided", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					expect( d.criticalCss() ).toBe( "" );
+				} );
+			} );
 		} );
 	}
 
