@@ -14,8 +14,13 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 		structAppend(
 			arguments.settings,
 			{
-				devMode : false,
-				cache   : { enabled : true, devCheckInterval : 2000 }
+				devMode     : false,
+				cache       : { enabled : true, devCheckInterval : 2000 },
+				criticalCss : {
+					enabled : false,
+					path    : "/tests/resources/critical",
+					suffix  : ".critical.css"
+				}
 			},
 			false
 		);
@@ -91,6 +96,60 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					prependPath       : ""
 				} );
 				expect( d.isHot() ).toBeFalse();
+			} );
+
+			describe( "critical CSS", function(){
+				it( "for a CSS asset: emits inline <style> + preload-swap when enabled and file exists", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : "",
+						criticalCss       : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var html = d.tags( "/css/app.css", { criticalEvent: "main.index" } );
+					expect( html ).toInclude( "<style>" );
+					expect( html ).toInclude( ".hero{color:##222" );
+					expect( html ).toInclude( "rel=""preload""" );
+					// Every rel="stylesheet" must be in a <noscript> (the fallback).
+					expect( arrayLen( reMatch( "rel=""stylesheet""", html ) ) )
+						.toBe( arrayLen( reMatch( "<noscript><link rel=""stylesheet""", html ) ) );
+				} );
+
+				it( "for a JS asset: emits inline <style> (route-keyed) + standard <script>", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : "",
+						criticalCss       : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var html = d.tags( "/tests/asset.js", { criticalEvent: "main.index" } );
+					expect( html ).toInclude( "<style>" );
+					expect( html ).toInclude( ".hero{color:##222" );
+					expect( html ).toInclude( "<script src=""/tests/asset.js" );
+				} );
+
+				it( "falls back to standard output when no event in context", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : "",
+						criticalCss       : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var html = d.tags( "/css/app.css" );
+					expect( html ).toInclude( "rel=""stylesheet""" );
+					expect( html ).notToInclude( "<style>" );
+				} );
+
+				it( "falls back to standard output when criticalCss.enabled is false (default)", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : ""
+					} );
+					var html = d.tags( "/css/app.css", { criticalEvent: "main.index" } );
+					expect( html ).toInclude( "rel=""stylesheet""" );
+					expect( html ).notToInclude( "<style>" );
+				} );
 			} );
 		} );
 	}

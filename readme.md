@@ -120,7 +120,7 @@ request, so submodule configs are picked up without any extra wiring.
 | Method | Returns | Notes |
 | --- | --- | --- |
 | `path( entry )` | `string` | Resolved URL for a single entry. |
-| `tags( entry )` | `string` | Full `<link>` / `<script>` HTML. Vite: aggregates CSS + module preloads. Manifest: single `<script>` or `<link>` based on extension. |
+| `tags( entry )` | `string` | Full `<link>` / `<script>` HTML. Vite: aggregates CSS + module preloads. Manifest: single `<script>` or `<link>` based on extension. With optional inline-critical-CSS rendering when `criticalCss.enabled` is true — see "Critical CSS" below. |
 | `bundle( entry )` | `struct` | `{ entry, css[], preload[], devUrl, hot }`. Use when you need to render tags yourself. |
 | `viteClient()` | `string` | `<script type="module" src=".../@vite/client"></script>`. Empty in prod. Deduped per request. |
 | `isHot()` | `boolean` | True when the Vite dev server hot file exists. |
@@ -161,6 +161,15 @@ mixr = {
         //   N  -> throttle to once per N ms
         //  -1  -> never recheck (treat dev like prod)
         devCheckInterval : 2000
+    },
+
+    // Critical CSS (above-the-fold inlining) — see "Critical CSS" section below
+    criticalCss : {
+        enabled : false,                 // OPT-IN
+        path    : "/includes/critical",  // module-relative directory
+        suffix  : ".critical.css"        // appended to event name
+        // Note: critical CSS is always skipped when isHot() — preview locally
+        //       with a production build (e.g. `npm run prod`).
     },
 
     // Per-submodule overrides (see below)
@@ -209,22 +218,61 @@ moduleSettings = {
 };
 ```
 
-Settings cascade rules:
+### How settings resolve
 
-1. **Behavioral keys cascade from root** — `driver`, `devMode`, `devServerUrl`,
-   `renderModulePreload`, `includeImportedCss`, and `cache` defined on the host
-   app apply to every submodule unless that submodule overrides them. This lets
-   you set `devMode = true` once for the whole app.
+Each module is self-contained. There is **no cascade** from the root app to
+submodules — installing a module from ForgeBox does not inherit your host's
+`devMode`, `driver`, or any other key. Settings resolve via a single chain
+(lowest to highest priority):
 
-2. **Module-relative paths do NOT cascade** — `manifestPath`, `buildPath`,
-   `hotFilePath`, `prependModuleRoot`, and `prependPath` are *not* inherited
-   from the root. Each module owns its own asset layout, and these fall back to
-   Mixr's built-in defaults unless the submodule (or
-   `mixr.modules.<name>`) declares them. This avoids the foot-gun where a host
-   app's `manifestPath` would otherwise be joined onto every submodule's
-   moduleRoot.
+1. **System defaults** — Mixr's built-in fallbacks (declared in mixr's own
+   `ModuleConfig.cfc`).
+2. **Module's own settings** — for the root app, the values under
+   `moduleSettings.mixr.*`. For a submodule, the values its own
+   `ModuleConfig.cfc` declares as `variables.settings.mixr.*`.
+3. **Host overrides via `modules.<name>`** — `moduleSettings.mixr.modules.<name>.*`
+   from the root app's config. This is the *only* mechanism by which one
+   module's config affects another. Host overrides win per-key over the
+   module's own settings.
 
-3. **Explicit submodule settings always win** over both of the above.
+Substructs (`cache`, `criticalCss`) are merged key-by-key, so a partial
+override like `cache: { devCheckInterval: 5000 }` keeps the default
+`cache.enabled = true`.
+
+#### Worked example
+
+```js
+moduleSettings = {
+    mixr: {
+        // Root app's own settings — apply ONLY to the root app.
+        driver       : "vite",
+        devMode      : true,
+        manifestPath : "/some/path/manifest.json",
+
+        // Host overrides — apply ONLY to the named submodule.
+        modules : {
+            admin : { manifestPath : "/admin/build/.vite/manifest.json" }
+        }
+    }
+};
+```
+
+What each module sees:
+
+- **Root app** — `driver=vite, devMode=true, manifestPath=/some/path/manifest.json`
+  (its own values, with system defaults filling in unspecified keys like
+  `renderModulePreload=true`).
+- **`admin` submodule** — host's `manifestPath` override wins; everything
+  else falls back to `admin`'s own `ModuleConfig.cfc` settings, which fall
+  back to system defaults. `driver` and `devMode` from the root do **NOT**
+  reach `admin`.
+- **`blog` submodule** (no host override, no own mixr settings) — system
+  defaults across the board (`driver=auto`, `devMode=false`, etc.).
+
+If you want `devMode = true` for several internal submodules, declare it
+under each `modules.<name>` block explicitly, or in each submodule's own
+`ModuleConfig.cfc`. Mixr does not auto-cascade — predictability beats
+convenience here, especially for installed-from-ForgeBox modules.
 
 ---
 
@@ -253,6 +301,145 @@ In **development** (`devMode = true` and `/includes/hot` exists):
 
 Hot-file polling is throttled by `cache.devCheckInterval` so it isn't a per-
 request disk hit.
+
+---
+
+## Critical CSS (above-the-fold inlining)
+
+A page-speed optimization that inlines a small per-route stylesheet into
+`<head>` as a `<style>` block, then async-loads the full stylesheet (preload +
+onload swap, with a `<noscript>` fallback). It's still the recommended pattern
+in 2026 — Lighthouse's "Eliminate render-blocking resources" audit rewards it.
+
+Mixr is build-agnostic. Pair with any tool that emits per-route CSS files:
+[`vite-plugin-critical`](https://www.npmjs.com/package/vite-plugin-critical) for
+Vite, [`laravel-mix-critical`](https://github.com/Pomax/laravel-mix-critical)
+for Mix/Webpack, or anything else that produces matching files.
+
+### Enabling critical CSS
+
+1. Drop your build's per-route critical CSS files at
+   `includes/critical/<event>.critical.css` (the path and suffix are
+   configurable). Examples: `main.index.critical.css`, `blog.show.critical.css`.
+2. Set `criticalCss.enabled = true` in your `mixr` settings.
+3. Keep calling `mixr().tags( "resources/js/app.js" )` exactly as before.
+
+### What `tags()` emits
+
+Without critical CSS (today's behavior, default):
+
+```html
+<link rel="stylesheet" href="/includes/build/assets/app-abc.css" />
+<link rel="modulepreload" href="/includes/build/assets/vendor-def.js" />
+<script type="module" src="/includes/build/assets/app-abc.js"></script>
+```
+
+With critical CSS enabled and a fixture file present for the current event:
+
+```html
+<style>/* …inlined critical CSS… */</style>
+<link rel="preload" as="style" href="/includes/build/assets/app-abc.css"
+      onload="this.onload=null;this.rel='stylesheet'" fetchpriority="high" />
+<noscript><link rel="stylesheet" href="/includes/build/assets/app-abc.css" /></noscript>
+<link rel="modulepreload" href="/includes/build/assets/vendor-def.js" />
+<script type="module" src="/includes/build/assets/app-abc.js"></script>
+```
+
+When no critical file exists for the current event, output is byte-for-byte
+identical to the no-critical case — Mixr falls through silently.
+
+### Convention
+
+The current event is auto-detected from the ColdBox RequestContext via
+`event.getCurrentEvent()`. The file lookup is:
+
+```
+<criticalCss.path>/<eventName><criticalCss.suffix>
+```
+
+Defaults: `path = "/includes/critical"`, `suffix = ".critical.css"`.
+
+So an event of `main.index` resolves to `/includes/critical/main.index.critical.css`
+under that module's moduleRoot.
+
+### Per-call options
+
+Pass via `mixr().tags( entry, { … } )`:
+
+- `criticalEvent` *(default: current event)* — override the auto-detected event name.
+- `criticalFile`  *(default: `""`)*  — bypass the event/path/suffix lookup with an explicit web path. *(Reserved for future use; resolution is currently event-based.)*
+- `skipCritical`  *(default: `false`)* — force standard `tags()` output for this call regardless of settings/files.
+- `nonce`         *(default: `""`)*   — CSP nonce, applied to both `<style>` and the preload `<link>`.
+
+### Dev-mode behavior
+
+Critical CSS is **always skipped** when Vite's hot file is present
+(`isHot() == true`). HMR injects CSS through JS, and inlining stale critical
+files would conflict. To preview production critical-CSS behavior locally,
+build with `npm run prod` (or your project's production-build command) and
+reload — or temporarily disable HMR.
+
+### Per-request dedupe
+
+When `tags()` is called multiple times in the same request (e.g. you're
+loading both an entry CSS and a separate JS bundle), the inline `<style>` is
+emitted only on the first call. Later calls in the same request still get
+their preload-swap link, but no duplicate `<style>` block.
+
+### Common usage patterns
+
+#### Pattern A — Vite, single entry per page
+
+```html
+<head>
+    #mixr().viteClient()#
+    #mixr().tags( "resources/js/app.js" )#
+</head>
+```
+
+#### Pattern B — Flat manifest, separate CSS + JS
+
+```html
+<head>
+    #mixr().tags( "/css/app.css" )#  <!-- inline + preload-swap CSS -->
+    #mixr().tags( "/js/app.js" )#    <!-- standard <script>; inline already deduped -->
+</head>
+```
+
+#### Pattern C — Per-route opt-out
+
+```cfm
+<!-- This particular handler/view shouldn't get critical inlining -->
+#mixr().tags( "resources/js/app.js", { skipCritical: true } )#
+```
+
+#### Pattern D — CSP nonce
+
+```cfm
+#mixr().tags( "resources/js/app.js", { nonce: prc.cspNonce } )#
+```
+
+#### Pattern E — Submodule opt-in / opt-out via host config
+
+```js
+moduleSettings = {
+    mixr: {
+        modules : {
+            // Opt admin in
+            admin : { criticalCss : { enabled : true } },
+            // Opt blog out (e.g. blog ships critical files but you don't want them in prod)
+            blog  : { criticalCss : { enabled : false } }
+        }
+    }
+};
+```
+
+### Safety: `</style>` rejection
+
+Mixr rejects critical CSS files that contain the literal string `</style>`
+— that would break the inlined `<style>` block and could be an XSS vector.
+A malformed file throws `MalformedCriticalCss` so the source build artifact
+gets fixed rather than silently producing broken HTML.
 
 ---
 
@@ -296,6 +483,18 @@ What changed:
   ```
 - `mixr()` now also accepts an explicit `moduleName` argument (preserved from
   2.x) and a no-asset fluent form. Old call sites are unaffected.
+- **Settings cascade removed.** Earlier 3.0 drafts cascaded "behavioral"
+  keys (like `devMode`) from the host app to every submodule. 3.0 final
+  drops this — each module is self-contained and the host overrides only
+  via `mixr.modules.<name>`. See the "How settings resolve" section above.
+  Apps that were relying on the cascade need to either declare the keys
+  on each submodule directly or via the host's `modules.<name>` block.
+- **Critical CSS support.** `tags()` gains optional inline-critical-CSS
+  rendering with async-loaded full stylesheet (preload + onload swap +
+  `<noscript>` fallback). Off by default; opt in via `criticalCss.enabled`.
+  Build-tooling-agnostic: drop per-route files at
+  `includes/critical/<event>.critical.css` and Mixr handles the rest.
+  See the "Critical CSS" section above.
 
 ### 1.x → 2.x
 

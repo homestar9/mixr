@@ -54,18 +54,69 @@ component extends="AbstractDriver" {
 	 * <script> for everything else based on file extension (or the explicit
 	 * `as` option).
 	 *
+	 * When `settings.criticalCss.enabled` is true and a critical CSS file
+	 * exists for the current event (via `options.criticalEvent`):
+	 *   - CSS asset:  inline <style> + preload-swap <link> for this href + <noscript> fallback.
+	 *   - JS asset:   inline <style> (route-keyed; independent of entry kind) + standard <script>.
+	 * `options.skipCritical = true` forces standard output for this call.
+	 *
 	 * @entry   Manifest source key.
-	 * @options { as: "auto"|"css"|"js", attributes: { … extra HTML attrs } }.
+	 * @options { as: "auto"|"css"|"js", attributes,
+	 *           criticalEvent, criticalSuppressInline, skipCritical, nonce }.
 	 */
 	string function tags( required string entry, struct options = {} ) {
 		var as    = arguments.options.keyExists( "as" )         ? arguments.options.as         : "auto";
 		var attrs = arguments.options.keyExists( "attributes" ) ? arguments.options.attributes : {};
-		var cacheKey = arguments.entry & "|" & as & "|" & hashStruct( attrs );
+		var skipCritical   = arguments.options.keyExists( "skipCritical" ) ? !!arguments.options.skipCritical : false;
+		var suppressInline = arguments.options.keyExists( "criticalSuppressInline" ) ? !!arguments.options.criticalSuppressInline : false;
+		var criticalEvent  = arguments.options.keyExists( "criticalEvent" ) ? arguments.options.criticalEvent : "";
+		var nonce          = arguments.options.keyExists( "nonce" ) ? arguments.options.nonce : "";
+
+		var inlineCss = "";
+		if ( !skipCritical ) {
+			inlineCss = readCriticalCss( criticalEvent );
+		}
+		var emittedInline = ( len( inlineCss ) && !suppressInline );
+
+		var cacheKey = arguments.entry & "|" & as & "|" & attrsKey( attrs )
+			& "|crit:"   & ( len( inlineCss ) ? "1" : "0" )
+			& "|skip:"   & ( skipCritical ? "1" : "0" )
+			& "|inline:" & ( emittedInline ? "1" : "0" )
+			& "|evt:"    & criticalEvent
+			& "|nonce:"  & nonce;
 
 		if ( variables._tags.keyExists( cacheKey ) ) return variables._tags[ cacheKey ];
 
 		var href = path( arguments.entry );
-		var html = variables.renderer.manifestTag( href = href, as = as, attributes = attrs );
+		var kind = ( as == "auto" ) ? ( reFindNoCase( "\.css(\?|##|$)", href ) ? "css" : "js" ) : as;
+		var html = "";
+
+		if ( len( inlineCss ) && kind == "css" ) {
+			// CSS asset, critical mode: inline <style> (when not suppressed)
+			// + preload-swap <link> + <noscript> fallback.
+			html = variables.renderer.criticalCssTags(
+				inlineCss  = emittedInline ? inlineCss : "",
+				hrefs      = [ href ],
+				attributes = attrs,
+				options    = { nonce: nonce }
+			);
+		} else if ( len( inlineCss ) && kind == "js" ) {
+			// JS asset, critical mode: route-keyed inline <style> +
+			// standard <script>. Inline only when not suppressed.
+			var prefix = "";
+			if ( emittedInline ) {
+				prefix = variables.renderer.criticalCssTags(
+					inlineCss  = inlineCss,
+					hrefs      = [],
+					options    = { nonce: nonce }
+				);
+			}
+			html = prefix & variables.renderer.manifestTag( href = href, as = as, attributes = attrs );
+		} else {
+			// No critical content (or suppressed without preload need): standard output.
+			html = variables.renderer.manifestTag( href = href, as = as, attributes = attrs );
+		}
+
 		variables._tags[ cacheKey ] = html;
 		return html;
 	}
@@ -98,13 +149,15 @@ component extends="AbstractDriver" {
 	}
 
 	/**
-	 * Stable hash of an attributes struct, used as part of the tag cache key.
+	 * Stable key fragment for an attributes struct, used as part of the tag
+	 * cache key. The serialized JSON is stable enough — hashing it adds work
+	 * for no functional benefit, since struct keyExists is dictionary-fast.
 	 *
 	 * @s Attributes struct.
 	 */
-	private string function hashStruct( required struct s ) {
+	private string function attrsKey( required struct s ) {
 		if ( arguments.s.isEmpty() ) return "";
-		return hash( serializeJson( arguments.s ) );
+		return serializeJson( arguments.s );
 	}
 
 }

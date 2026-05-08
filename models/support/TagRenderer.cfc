@@ -87,6 +87,83 @@ component singleton {
 		return scriptTag( src = arguments.href, extraAttrs = arguments.attributes );
 	}
 
+	/**
+	 * Render a critical-CSS HTML block: an inline `<style>` containing the
+	 * pre-extracted above-the-fold CSS, followed by a preload+onload-swap
+	 * `<link>` for each full-CSS href, with a `<noscript><link
+	 * rel="stylesheet">` fallback for clients without JavaScript.
+	 *
+	 * The inline CSS body is NOT escaped (escaping breaks selectors). The
+	 * `</style>` rejection happens at read time in `AbstractDriver.readCriticalCss()`.
+	 *
+	 * Pass `inlineCss = ""` to suppress the inline `<style>` (e.g. for the
+	 * second + later calls in a request, when the inline has already been
+	 * deduped at the facade layer). When `hrefs` is empty, only the inline
+	 * `<style>` is emitted.
+	 *
+	 * Options:
+	 *   - nonce          (string, default ""):    CSP nonce; applied to <style> and <link rel="preload">.
+	 *   - fetchpriority  (boolean, default true): emit fetchpriority="high" on the preload <link>.
+	 *
+	 * @inlineCss   Raw critical CSS body (NOT escaped). Empty string suppresses the <style> block.
+	 * @hrefs       Array of full-stylesheet URLs to async-load via preload+swap.
+	 * @attributes  Extra HTML attributes for the preload <link> (escaped).
+	 * @options     { nonce, fetchpriority }.
+	 */
+	string function criticalCssTags( required string inlineCss, required array hrefs, struct attributes = {}, struct options = {} ) {
+		var nonce         = arguments.options.keyExists( "nonce" )         ? arguments.options.nonce         : "";
+		var fetchpriority = arguments.options.keyExists( "fetchpriority" ) ? arguments.options.fetchpriority : true;
+
+		var out = createObject( "java", "java.lang.StringBuilder" ).init();
+
+		if ( len( arguments.inlineCss ) ) {
+			out.append( inlineStyleTag( arguments.inlineCss, nonce ) );
+		}
+		for ( var href in arguments.hrefs ) {
+			out.append( preloadSwapTag( href, nonce, fetchpriority, arguments.attributes ) );
+		}
+		return out.toString();
+	}
+
+	/**
+	 * Render a Vite production tag set with critical-CSS handling: an inline
+	 * `<style>` (when `inlineCss` is non-empty) replaces the standard CSS
+	 * `<link rel="stylesheet">` block; full-CSS hrefs are async-loaded via
+	 * preload+swap. Modulepreload + entry `<script type="module">` are
+	 * preserved bit-exact from `viteProductionTags()`.
+	 *
+	 * When `inlineCss == ""` AND `bundle.css` is empty, output is identical
+	 * to `viteProductionTags()` for the same bundle.
+	 *
+	 * @inlineCss   Raw critical CSS body. Empty string suppresses the <style>.
+	 * @bundle      Normalized bundle struct as produced by ViteDriver.bundle().
+	 * @attributes  Extra HTML attributes for the entry <script> (escaped).
+	 * @options     { nonce, fetchpriority }.
+	 */
+	string function viteCriticalProductionTags( required string inlineCss, required struct bundle, struct attributes = {}, struct options = {} ) {
+		var nonce         = arguments.options.keyExists( "nonce" )         ? arguments.options.nonce         : "";
+		var fetchpriority = arguments.options.keyExists( "fetchpriority" ) ? arguments.options.fetchpriority : true;
+
+		var out = createObject( "java", "java.lang.StringBuilder" ).init();
+
+		if ( len( arguments.inlineCss ) ) {
+			out.append( inlineStyleTag( arguments.inlineCss, nonce ) );
+		}
+		for ( var href in arguments.bundle.css ) {
+			out.append( preloadSwapTag( href, nonce, fetchpriority, {} ) );
+		}
+		for ( var href in arguments.bundle.preload ) {
+			out.append( linkTag( href = href, rel = "modulepreload" ) );
+		}
+		out.append( scriptTag(
+			src        = arguments.bundle.js,
+			type       = "module",
+			extraAttrs = arguments.attributes
+		) );
+
+		return out.toString();
+	}
+
 	/* ------------------------------------------------------------------ */
 
 	/**
@@ -157,6 +234,50 @@ component singleton {
 	 */
 	private string function escape( required string value ) {
 		return replaceList( arguments.value, '&,<,>,",''', "&amp;,&lt;,&gt;,&quot;,&##39;" );
+	}
+
+	/**
+	 * Render an inline `<style>` block. The CSS body is intentionally NOT
+	 * escaped (escaping would break selectors). The `</style>` injection
+	 * guard runs at read time in `AbstractDriver.readCriticalCss()`.
+	 *
+	 * @css   Raw CSS body.
+	 * @nonce Optional CSP nonce.
+	 */
+	private string function inlineStyleTag( required string css, string nonce = "" ) {
+		var attrs = "";
+		if ( len( arguments.nonce ) ) attrs &= ' nonce="' & escape( arguments.nonce ) & '"';
+		return "<style" & attrs & ">" & arguments.css & "</style>";
+	}
+
+	/**
+	 * Render the preload+onload-swap pair for one async-loaded stylesheet:
+	 * a `<link rel="preload" as="style" ... onload="...">` plus a
+	 * `<noscript><link rel="stylesheet" ...></noscript>` fallback.
+	 *
+	 * Defaults to `fetchpriority="high"` on the preload link (Chrome/Edge/Safari).
+	 *
+	 * @href          Full-stylesheet URL.
+	 * @nonce         Optional CSP nonce.
+	 * @fetchpriority Emit fetchpriority="high" on the preload link when true.
+	 * @extraAttrs    Extra HTML attributes for the preload <link> (escaped).
+	 */
+	private string function preloadSwapTag(
+		required string href,
+		string nonce = "",
+		boolean fetchpriority = true,
+		struct extraAttrs = {}
+	) {
+		var preloadAttrs = ' rel="preload" as="style" href="' & escape( arguments.href ) & '"';
+		preloadAttrs &= ' onload="this.onload=null;this.rel=''stylesheet''"';
+		if ( arguments.fetchpriority ) preloadAttrs &= ' fetchpriority="high"';
+		if ( len( arguments.nonce ) )  preloadAttrs &= ' nonce="' & escape( arguments.nonce ) & '"';
+		preloadAttrs &= renderAttrs( arguments.extraAttrs );
+
+		var noscriptInner = ' rel="stylesheet" href="' & escape( arguments.href ) & '"';
+
+		return "<link" & preloadAttrs & " />"
+			& "<noscript><link" & noscriptInner & " /></noscript>";
 	}
 
 }

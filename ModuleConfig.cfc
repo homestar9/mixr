@@ -26,9 +26,15 @@ component {
 
 	/**
 	 * Configure Module
+	 *
+	 * The values declared here are the **system defaults**. Each module
+	 * (the root app or any submodule) sees these as its starting point
+	 * before its own settings (and any host overrides via `modules.<name>`)
+	 * are layered on. Settings do NOT cascade between modules — see
+	 * `models/Mixr.cfc` `effectiveSettings()` for the resolution chain.
 	 */
 	function configure(){
-		settings = {
+		variables.settings = {
 			// "vite" | "manifest" | "auto"
 			"driver"              : "auto",
 
@@ -55,6 +61,17 @@ component {
 				"devCheckInterval" : 2000
 			},
 
+			// Critical CSS (above-the-fold inlining)
+			//   When enabled, tags() inlines the route's critical CSS file
+			//   as a <style> block and async-loads the full CSS via
+			//   preload+onload swap (with <noscript> fallback).
+			//   Always skipped when isHot() — preview locally with `npm run prod`.
+			"criticalCss" : {
+				"enabled" : false,                 // OPT-IN
+				"path"    : "/includes/critical",  // module-relative directory
+				"suffix"  : ".critical.css"        // appended to event name
+			},
+
 			"modules" : {}
 		};
 	}
@@ -64,12 +81,6 @@ component {
 	 */
 	function onLoad(){
         binder.map( "Mixr@mixr" ).to( "#moduleMapping#.models.Mixr" );
-        binder.map( "MixrScope@mixr" ).to( "#moduleMapping#.models.MixrScope" );
-        binder.map( "ManifestStore@mixr" ).to( "#moduleMapping#.models.support.ManifestStore" );
-        binder.map( "HotFileWatcher@mixr" ).to( "#moduleMapping#.models.support.HotFileWatcher" );
-        binder.map( "TagRenderer@mixr" ).to( "#moduleMapping#.models.support.TagRenderer" );
-        binder.map( "ManifestDriver@mixr" ).to( "#moduleMapping#.models.drivers.ManifestDriver" );
-        binder.map( "ViteDriver@mixr" ).to( "#moduleMapping#.models.drivers.ViteDriver" );
 	}
 
 	/**

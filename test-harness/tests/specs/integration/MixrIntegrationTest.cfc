@@ -76,6 +76,70 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				expect( p ).notToInclude( "tests/resources" );
 			} );
 
+			describe( "critical CSS (vite submodule, criticalCss.enabled=true via ModuleConfig)", function(){
+				beforeEach( function( currentSpec ){
+					// reset the per-request inline-dedupe flag for a clean state
+					var event = getRequestContext();
+					event.removePrivateValue( "mixr:criticalInlined:vite" );
+				} );
+
+				it( "inlines <style> + emits preload-swap + <noscript> when fixture file exists for the event", function(){
+					var html = mixr.tags(
+						entry      = "resources/js/app.js",
+						moduleName = "vite",
+						options    = { criticalEvent: "main.index" }
+					);
+					expect( html ).toInclude( "<style>" );
+					expect( html ).toInclude( ".fold{color:##0a0" );
+					expect( html ).toInclude( "rel=""preload""" );
+					expect( html ).toInclude( "as=""style""" );
+					expect( html ).toInclude( "fetchpriority=""high""" );
+					expect( html ).toInclude( "<noscript><link rel=""stylesheet""" );
+					// Every <link rel="stylesheet"> must be wrapped in <noscript> — no bare form.
+					expect( arrayLen( reMatch( "<link rel=""stylesheet""", html ) ) )
+						.toBe( arrayLen( reMatch( "<noscript><link rel=""stylesheet""", html ) ) );
+					// JS portion preserved
+					expect( html ).toInclude( "<script type=""module""" );
+				} );
+
+				it( "falls back to standard tags() output when the critical file is missing for an event", function(){
+					var html = mixr.tags(
+						entry      = "resources/js/app.js",
+						moduleName = "vite",
+						options    = { criticalEvent: "missing.event" }
+					);
+					expect( html ).notToInclude( "<style>" );
+					expect( html ).toInclude( "<link rel=""stylesheet""" );
+				} );
+
+				it( "options.skipCritical=true forces standard output regardless of fixture", function(){
+					var html = mixr.tags(
+						entry      = "resources/js/app.js",
+						moduleName = "vite",
+						options    = { criticalEvent: "main.index", skipCritical: true }
+					);
+					expect( html ).notToInclude( "<style>" );
+					expect( html ).toInclude( "<link rel=""stylesheet""" );
+				} );
+
+				it( "per-request dedupe: a second tags() call in the same request emits no inline <style>", function(){
+					var first = mixr.tags(
+						entry      = "resources/js/app.js",
+						moduleName = "vite",
+						options    = { criticalEvent: "main.index" }
+					);
+					var second = mixr.tags(
+						entry      = "resources/js/app.js",
+						moduleName = "vite",
+						options    = { criticalEvent: "main.index" }
+					);
+					expect( first ).toInclude( "<style>" );
+					expect( second ).notToInclude( "<style>" );
+					// second still emits preload-swap for the CSS
+					expect( second ).toInclude( "rel=""preload""" );
+				} );
+			} );
+
 			describe( "global mixr() helper", function(){
 				// All four call shapes are exercised in a single handler action
 				// to avoid TestBox + Adobe 2021 stub regeneration issues with

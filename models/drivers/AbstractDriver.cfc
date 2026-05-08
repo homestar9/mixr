@@ -17,9 +17,12 @@ component {
 	property name="renderer"   type="any";
 
 	// keyed caches — invalidated by clearCaches()
-	variables._paths   = {};
-	variables._bundles = {};
-	variables._tags    = {};
+	variables._paths    = {};
+	variables._bundles  = {};
+	variables._tags     = {};
+	// per-event inline critical CSS contents:
+	//   variables._criticalCache[ eventName ] = { contents, mtime, lastChecked }
+	variables._criticalCache = {};
 
 	/**
 	 * Constructor. Wires the driver to its settings, module root, and shared
@@ -45,9 +48,13 @@ component {
 		variables.watcher    = arguments.watcher;
 		variables.renderer   = arguments.renderer;
 
+		// Pin the absolute (un-expanded) manifest path once. joinPath runs a
+		// regex on every call, so caching the result keeps it off the hot path.
+		variables._absManifest = joinPath( variables.moduleRoot, variables.settings.manifestPath );
+
 		// any time the manifest reloads, drop our derived caches
 		variables.store.onReload(
-			manifestPath = absoluteManifestPath(),
+			manifestPath = variables._absManifest,
 			callback     = ( parsed ) => clearCaches()
 		);
 
@@ -59,9 +66,10 @@ component {
 	 * Called by the ManifestStore reload listener and by Mixr.refresh().
 	 */
 	function clearCaches() {
-		variables._paths   = {};
-		variables._bundles = {};
-		variables._tags    = {};
+		variables._paths         = {};
+		variables._bundles       = {};
+		variables._tags          = {};
+		variables._criticalCache = {};
 	}
 
 	/* ------------------------------------------------------------------ */
@@ -72,18 +80,119 @@ component {
 	 */
 	struct function getManifest() {
 		return variables.store.get(
-			manifestPath     = absoluteManifestPath(),
+			manifestPath     = variables._absManifest,
 			devMode          = variables.settings.devMode,
 			devCheckInterval = variables.settings.cache.devCheckInterval
 		);
 	}
 
 	/**
-	 * Compute the absolute (un-expanded) manifest path by joining moduleRoot
-	 * and settings.manifestPath.
+	 * Return the cached absolute (un-expanded) manifest path.
 	 */
 	string function absoluteManifestPath() {
-		return joinPath( variables.moduleRoot, variables.settings.manifestPath );
+		return variables._absManifest;
+	}
+
+	/**
+	 * Read and cache the inline critical CSS contents for a given event.
+	 *
+	 * Returns an empty string when:
+	 *   - settings.criticalCss.enabled is false, or
+	 *   - isHot() is true (critical CSS is unconditionally skipped in dev), or
+	 *   - eventName is empty (no event in context, e.g. scheduled task), or
+	 *   - the resolved file does not exist, or
+	 *   - the file read fails (e.g. mid-write race during a build).
+	 *
+	 * In production, file contents are read once and pinned. In dev, mtime
+	 * checks are throttled by `settings.cache.devCheckInterval` (same
+	 * semantics as ManifestStore: 0=every request, N=throttle ms, -1=never).
+	 *
+	 * Throws `MalformedCriticalCss` if the file body contains the literal
+	 * string `</style>` — that would break HTML structure when inlined.
+	 *
+	 * @eventName ColdBox event name (e.g. "main.index"). Empty string returns "".
+	 */
+	string function readCriticalCss( required string eventName ) {
+		if ( !variables.settings.keyExists( "criticalCss" ) ) return "";
+		if ( !variables.settings.criticalCss.enabled )       return "";
+		if ( !len( arguments.eventName ) )                   return "";
+		if ( isHot() )                                       return "";
+
+		var cached = variables._criticalCache.keyExists( arguments.eventName )
+			? variables._criticalCache[ arguments.eventName ]
+			: { contents: "", mtime: 0, lastChecked: 0, resolved: false };
+
+		var devCheck = variables.settings.cache.devCheckInterval;
+		var inDevCheckMode = variables.settings.devMode && devCheck != -1;
+
+		if ( cached.resolved && !inDevCheckMode ) {
+			return cached.contents;
+		}
+
+		// In dev: throttle mtime rechecks
+		if ( cached.resolved && inDevCheckMode && devCheck > 0 ) {
+			var nowMs = getTickCount();
+			if ( ( nowMs - cached.lastChecked ) < devCheck ) {
+				return cached.contents;
+			}
+		}
+
+		var absPath = expandPath( joinPath(
+			joinPath( variables.moduleRoot, variables.settings.criticalCss.path ),
+			arguments.eventName & variables.settings.criticalCss.suffix
+		) );
+
+		if ( !fileExists( absPath ) ) {
+			variables._criticalCache[ arguments.eventName ] = {
+				contents    : "",
+				mtime       : 0,
+				lastChecked : getTickCount(),
+				resolved    : true
+			};
+			return "";
+		}
+
+		var currentMtime = getFileInfo( absPath ).lastModified.getTime();
+		if ( cached.resolved && cached.mtime == currentMtime ) {
+			cached.lastChecked = getTickCount();
+			variables._criticalCache[ arguments.eventName ] = cached;
+			return cached.contents;
+		}
+
+		var contents = "";
+		try {
+			contents = fileRead( absPath );
+		} catch ( any e ) {
+			// transient read failure (file mid-write, etc.) — fall through silently
+			return "";
+		}
+
+		// XSS / HTML-structure guard: a critical CSS file containing </style>
+		// would break the inlined <style> block. Reject loudly so the broken
+		// build artifact is fixed at the source.
+		if ( reFindNoCase( "</style", contents ) ) {
+			throw(
+				message = "Critical CSS file contains literal </style> sequence",
+				type    = "MalformedCriticalCss",
+				detail  = "Refusing to inline " & absPath & " — it would break HTML structure. Fix the source build artifact."
+			);
+		}
+
+		variables._criticalCache[ arguments.eventName ] = {
+			contents    : contents,
+			mtime       : currentMtime,
+			lastChecked : getTickCount(),
+			resolved    : true
+		};
+		return contents;
+	}
+
+	/**
+	 * Each concrete driver must implement isHot() — true when devMode is on
+	 * AND a Vite hot file is present. ManifestDriver always returns false.
+	 */
+	boolean function isHot() {
+		return false;
 	}
 
 	/**

@@ -12,6 +12,9 @@ component singleton {
 
 	// keyed by absolute path -> { hot: boolean, url: string, lastCheck: numeric }
 	variables._state = {};
+	// memoized expandPath results: input string -> expanded path. expandPath
+	// runs on every isHot()/url() call, so caching keeps it off the hot path.
+	variables._expandedCache = {};
 
 	/**
 	 * Constructor. Singleton; called once by WireBox at boot.
@@ -68,7 +71,7 @@ component singleton {
 	 */
 	function refresh( string hotFilePath = "" ) {
 		if ( len( arguments.hotFilePath ) ) {
-			var expanded = expandPath( arguments.hotFilePath );
+			var expanded = resolveExpanded( arguments.hotFilePath );
 			structDelete( variables._state, expanded );
 		} else {
 			variables._state = {};
@@ -90,7 +93,7 @@ component singleton {
 		required boolean devMode,
 		required numeric devCheckInterval
 	) {
-		var expanded = expandPath( arguments.hotFilePath );
+		var expanded = resolveExpanded( arguments.hotFilePath );
 		var now = getTickCount();
 
 		if ( variables._state.keyExists( expanded ) ) {
@@ -116,6 +119,25 @@ component singleton {
 		var state = { hot: present, devUrl: devUrl, lastCheck: now };
 		variables._state[ expanded ] = state;
 		return state;
+	}
+
+	/**
+	 * Memoize expandPath for a given input. expandPath does filesystem
+	 * canonicalization and runs on every hot-path getState() call (even when
+	 * the throttle skips disk I/O). Writes are guarded by a short exclusive
+	 * lock; reads are lock-free (idempotent racy writes are safe).
+	 *
+	 * @path Input path (relative or absolute).
+	 */
+	private string function resolveExpanded( required string path ) {
+		if ( variables._expandedCache.keyExists( arguments.path ) ) {
+			return variables._expandedCache[ arguments.path ];
+		}
+		var expanded = expandPath( arguments.path );
+		lock name="mixr.hot.expand" type="exclusive" timeout="5" {
+			variables._expandedCache[ arguments.path ] = expanded;
+		}
+		return expanded;
 	}
 
 }

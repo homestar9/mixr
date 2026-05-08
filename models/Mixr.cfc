@@ -21,6 +21,8 @@ component
 	variables._drivers = {};
 	// bound scopes keyed by moduleName
 	variables._scopes  = {};
+	// submodule's own settings (loaded lazily from its ModuleConfig.cfc)
+	variables._submoduleOwnSettings = {};
 
 	// support singletons (lazy)
 	variables._store    = "";
@@ -71,12 +73,52 @@ component
 	 * driver; <link rel="stylesheet">/<link rel="modulepreload">/<script type="module">
 	 * for Vite (or a single dev-server <script> when hot).
 	 *
+	 * When `criticalCss.enabled` is true and a critical CSS file exists for
+	 * the current event, the CSS portion is replaced with an inline `<style>`
+	 * + preload-swap + `<noscript>` fallback. The current event is auto-
+	 * detected from the RequestContext; pass `options.criticalEvent` to
+	 * override or `options.skipCritical = true` to force standard output.
+	 *
+	 * Per-request dedupe: the inline `<style>` is emitted only on the first
+	 * `tags()` call per moduleName per request. Subsequent calls in the same
+	 * request still get their preload-swap link, but no duplicate `<style>`.
+	 *
 	 * @entry      Logical entry path.
 	 * @moduleName Module to resolve from. Defaults to root app when omitted.
-	 * @options    Optional struct: { as, attributes, renderModulePreload, includeImportedCss }.
+	 * @options    Optional struct: { as, attributes, renderModulePreload,
+	 *             includeImportedCss, criticalEvent, criticalFile,
+	 *             skipCritical, nonce }.
 	 */
 	string function tags( required string entry, string moduleName = "", struct options = {} ) {
-		return driverFor( arguments.moduleName ).tags( arguments.entry, arguments.options );
+		var opts = duplicate( arguments.options );
+
+		// Inject the current event name when caller didn't override.
+		if ( !opts.keyExists( "criticalEvent" ) ) {
+			try {
+				opts.criticalEvent = controller.getRequestService().getContext().getCurrentEvent();
+			} catch ( any e ) {
+				// Outside a request context (e.g. scheduled task) — leave unset
+				// so drivers fall through to standard rendering.
+				opts.criticalEvent = "";
+			}
+		}
+
+		// Per-request dedupe of the inline <style>. First call sets the flag
+		// and emits the inline; later calls signal the driver to suppress it
+		// (the preload-swap CSS link is still emitted).
+		try {
+			var event = controller.getRequestService().getContext();
+			var flag  = "mixr:criticalInlined:" & arguments.moduleName;
+			if ( event.privateValueExists( flag ) ) {
+				opts.criticalSuppressInline = true;
+			} else {
+				event.setPrivateValue( flag, true );
+			}
+		} catch ( any e ) {
+			// Outside a request — caller is responsible for not double-rendering.
+		}
+
+		return driverFor( arguments.moduleName ).tags( arguments.entry, opts );
 	}
 
 	/**
@@ -150,9 +192,11 @@ component
 		if ( len( arguments.moduleName ) ) {
 			structDelete( variables._drivers, arguments.moduleName );
 			structDelete( variables._scopes,  arguments.moduleName );
+			structDelete( variables._submoduleOwnSettings, arguments.moduleName );
 		} else {
 			variables._drivers = {};
 			variables._scopes  = {};
+			variables._submoduleOwnSettings = {};
 		}
 		// also nuke parsed manifests + hot state so the next call hits disk
 		getStore().refresh();
@@ -201,88 +245,120 @@ component
 	/**
 	 * Build the effective settings struct for one module.
 	 *
-	 * Two-tier cascade:
+	 * Each module is self-contained — there is no cascade from the root app
+	 * to submodules. Settings resolve via a single chain (lowest to highest
+	 * priority):
 	 *
-	 *   - **Behavioral keys** (driver, devMode, devServerUrl,
-	 *     renderModulePreload, includeImportedCss, cache) inherit from the
-	 *     root app's settings so the host can set one default and have it
-	 *     apply to every submodule.
+	 *   1. **System defaults** — declared in mixr's ModuleConfig.cfc.
+	 *   2. **Module's own settings** — for the root app, the values under
+	 *      `moduleSettings.mixr.*`. For a submodule, the values declared in
+	 *      its own `variables.settings.mixr.*` from its ModuleConfig.cfc.
+	 *   3. **Host overrides** — `moduleSettings.mixr.modules.<name>.*` from
+	 *      the root app's config. This is the ONLY mechanism by which one
+	 *      module's config affects another.
 	 *
-	 *   - **Module-relative paths** (manifestPath, buildPath, hotFilePath,
-	 *     prependModuleRoot, prependPath) do NOT inherit from root. Each
-	 *     module owns its own asset layout, so paths fall back to the
-	 *     system defaults declared in mixr's ModuleConfig.cfc unless the
-	 *     submodule (or moduleSettings.mixr.modules.<name>) explicitly
-	 *     overrides them. This avoids the foot-gun where a host app's
-	 *     `manifestPath` would otherwise be joined onto every submodule's
-	 *     moduleRoot.
-	 *
-	 *   - **Submodule overrides** win over both of the above for any key
-	 *     they explicitly declare.
-	 *
-	 * The 'modules' key itself is never inherited. Submodule settings are
+	 * The 'modules' key itself is never inherited. Submodule own-settings are
 	 * lazy-loaded the first time a moduleName is seen.
+	 *
+	 * Substruct values (`cache`, `criticalCss`) are merged key-by-key at each
+	 * tier, not replaced wholesale — so a partial override like
+	 * `{ criticalCss: { enabled: true } }` keeps default `path` and `suffix`.
 	 *
 	 * @moduleName Module name; "" returns the root app's settings.
 	 */
 	private struct function effectiveSettings( required string moduleName ) {
-		var rootBase = duplicate( settings );
-		structDelete( rootBase, "modules" );
-
-		// merge cache substruct defaults
-		if ( !rootBase.keyExists( "cache" ) || !isStruct( rootBase.cache ) ) {
-			rootBase.cache = { enabled: true, devCheckInterval: 2000 };
-		} else {
-			if ( !rootBase.cache.keyExists( "enabled" ) )          rootBase.cache.enabled = true;
-			if ( !rootBase.cache.keyExists( "devCheckInterval" ) ) rootBase.cache.devCheckInterval = 2000;
+		// Root app: tier 2 IS the answer (its own settings, with defaults filled in).
+		if ( !len( arguments.moduleName ) ) {
+			return mergeWithDefaults( duplicate( settings ) );
 		}
 
-		// Root app: rootBase IS the effective settings.
-		if ( !len( arguments.moduleName ) ) return rootBase;
-
-		// Submodule: start from system path defaults, cascade behavioral
-		// keys from root, then overlay any explicit submodule settings.
-		var base = systemPathDefaults();
-
-		var BEHAVIORAL_KEYS = [ "driver", "devMode", "devServerUrl", "renderModulePreload", "includeImportedCss" ];
-		for ( var k in BEHAVIORAL_KEYS ) {
-			if ( rootBase.keyExists( k ) ) base[ k ] = rootBase[ k ];
+		// Submodule: defaults → own settings → host override.
+		var base = mergeWithDefaults( {} );
+		mergeInto( base, lazyLoadSubmoduleOwnSettings( arguments.moduleName ) );
+		if ( settings.keyExists( "modules" ) && settings.modules.keyExists( arguments.moduleName ) ) {
+			mergeInto( base, settings.modules[ arguments.moduleName ] );
 		}
-		// cache is behavioral and always cascades
-		base.cache = duplicate( rootBase.cache );
-
-		// lazy-load the submodule's own ModuleConfig.cfc settings
-		if ( !settings.modules.keyExists( arguments.moduleName ) ) {
-			var moduleSettings = wirebox.getInstance( dsl = "coldbox:moduleSettings:#arguments.moduleName#" );
-			settings.modules[ arguments.moduleName ] = moduleSettings.keyExists( "mixr" ) ? moduleSettings.mixr : {};
-		}
-
-		var override = settings.modules[ arguments.moduleName ];
-		for ( var key in override ) {
-			if ( key == "modules" ) continue;
-			if ( key == "cache" && isStruct( override.cache ) ) {
-				structAppend( base.cache, override.cache, true );
-				continue;
-			}
-			base[ key ] = override[ key ];
-		}
-
 		return base;
 	}
 
 	/**
-	 * System defaults for module-relative path settings. Kept in sync with
-	 * the defaults declared in mixr's ModuleConfig.cfc. These are the values
-	 * a submodule sees when neither it nor moduleSettings.mixr.modules.<name>
-	 * declares an override — they are NOT inherited from the root app.
+	 * Read a submodule's own mixr settings (from its ModuleConfig.cfc),
+	 * cached per-moduleName for the life of the application. Returns an
+	 * empty struct if the submodule does not declare a `mixr` settings key.
+	 *
+	 * @moduleName Submodule name (non-empty).
 	 */
-	private struct function systemPathDefaults() {
+	private struct function lazyLoadSubmoduleOwnSettings( required string moduleName ) {
+		if ( variables._submoduleOwnSettings.keyExists( arguments.moduleName ) ) {
+			return variables._submoduleOwnSettings[ arguments.moduleName ];
+		}
+		var moduleSettings = wirebox.getInstance( dsl = "coldbox:moduleSettings:#arguments.moduleName#" );
+		var own = ( moduleSettings.keyExists( "mixr" ) && isStruct( moduleSettings.mixr ) ) ? moduleSettings.mixr : {};
+		variables._submoduleOwnSettings[ arguments.moduleName ] = own;
+		return own;
+	}
+
+	/**
+	 * Merge `overrides` over Mixr's system defaults and return a new struct.
+	 * Substructs (`cache`, `criticalCss`) are merged key-by-key, not replaced
+	 * wholesale. The `modules` key is stripped — it is a top-level routing
+	 * concept, not part of any module's effective settings.
+	 *
+	 * @overrides Partial settings struct from the user's config.
+	 */
+	private struct function mergeWithDefaults( required struct overrides ) {
+		var base = systemDefaults();
+		mergeInto( base, arguments.overrides );
+		structDelete( base, "modules" );
+		return base;
+	}
+
+	/**
+	 * Merge `overrides` into `base` in place. Top-level keys are replaced;
+	 * substructs are merged key-by-key (one level deep) so partial overrides
+	 * preserve defaults for keys they do not specify.
+	 *
+	 * @base      Target struct (mutated in place).
+	 * @overrides Source struct.
+	 */
+	private function mergeInto( required struct base, required struct overrides ) {
+		for ( var key in arguments.overrides ) {
+			if ( key == "modules" ) continue;
+			var v = arguments.overrides[ key ];
+			if ( isStruct( v ) && arguments.base.keyExists( key ) && isStruct( arguments.base[ key ] ) ) {
+				structAppend( arguments.base[ key ], v, true );
+			} else {
+				arguments.base[ key ] = v;
+			}
+		}
+	}
+
+	/**
+	 * Mixr's system defaults — the values every module starts from before
+	 * its own settings (and any host overrides) are layered on. Kept in sync
+	 * with the defaults declared in mixr's ModuleConfig.cfc.
+	 */
+	private struct function systemDefaults() {
 		return {
-			"manifestPath"      : "/includes/build/.vite/manifest.json",
-			"buildPath"         : "/includes/build",
-			"hotFilePath"       : "/includes/hot",
-			"prependModuleRoot" : true,
-			"prependPath"       : "/includes"
+			"driver"              : "auto",
+			"manifestPath"        : "/includes/build/.vite/manifest.json",
+			"buildPath"           : "/includes/build",
+			"hotFilePath"         : "/includes/hot",
+			"devServerUrl"        : "",
+			"devMode"             : false,
+			"renderModulePreload" : true,
+			"includeImportedCss"  : true,
+			"prependModuleRoot"   : true,
+			"prependPath"         : "/includes",
+			"cache"               : {
+				"enabled"          : true,
+				"devCheckInterval" : 2000
+			},
+			"criticalCss"         : {
+				"enabled" : false,
+				"path"    : "/includes/critical",
+				"suffix"  : ".critical.css"
+			}
 		};
 	}
 

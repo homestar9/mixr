@@ -47,8 +47,16 @@ component extends="AbstractDriver" {
 	 * single dev-server <script type="module">; in prod emits CSS <link>s,
 	 * <link rel="modulepreload"> for imported chunks, and the entry script.
 	 *
+	 * When `settings.criticalCss.enabled` is true and a critical CSS file
+	 * exists for the current event (via `options.criticalEvent`), the CSS
+	 * `<link rel="stylesheet">` block is replaced with an inline `<style>`
+	 * + per-CSS preload+swap + `<noscript>` fallback. Modulepreload + entry
+	 * <script> are unchanged. Critical handling is always skipped in dev
+	 * (`isHot()==true`).
+	 *
 	 * @entry   Vite source key.
-	 * @options { renderModulePreload, includeImportedCss, attributes }.
+	 * @options { renderModulePreload, includeImportedCss, attributes,
+	 *           criticalEvent, criticalSuppressInline, skipCritical, nonce }.
 	 */
 	string function tags( required string entry, struct options = {} ) {
 		var attrs = arguments.options.keyExists( "attributes" ) ? arguments.options.attributes : {};
@@ -62,9 +70,30 @@ component extends="AbstractDriver" {
 			);
 		}
 
-		var renderPreload = arguments.options.keyExists( "renderModulePreload" ) ? arguments.options.renderModulePreload : variables.settings.renderModulePreload;
-		var includeCss    = arguments.options.keyExists( "includeImportedCss" )  ? arguments.options.includeImportedCss  : variables.settings.includeImportedCss;
-		var cacheKey = arguments.entry & "|" & renderPreload & "|" & includeCss & "|" & hashStruct( attrs );
+		var renderPreload  = arguments.options.keyExists( "renderModulePreload" ) ? arguments.options.renderModulePreload : variables.settings.renderModulePreload;
+		var includeCss     = arguments.options.keyExists( "includeImportedCss" )  ? arguments.options.includeImportedCss  : variables.settings.includeImportedCss;
+		var skipCritical   = arguments.options.keyExists( "skipCritical" ) ? !!arguments.options.skipCritical : false;
+		var suppressInline = arguments.options.keyExists( "criticalSuppressInline" ) ? !!arguments.options.criticalSuppressInline : false;
+		var criticalEvent  = arguments.options.keyExists( "criticalEvent" ) ? arguments.options.criticalEvent : "";
+		var nonce          = arguments.options.keyExists( "nonce" ) ? arguments.options.nonce : "";
+
+		// Resolve inline critical first — its presence/absence is part of the cache key.
+		var inlineCss = "";
+		if ( !skipCritical ) {
+			inlineCss = readCriticalCss( criticalEvent );
+		}
+		// Per-request dedupe: when the facade signals the inline has already
+		// been rendered earlier this request, suppress the <style> here but
+		// still preload-swap the CSS hrefs (so a second tags() call still
+		// gets its full-CSS link).
+		var emittedInline = ( len( inlineCss ) && !suppressInline );
+
+		var cacheKey = arguments.entry & "|" & renderPreload & "|" & includeCss & "|" & attrsKey( attrs )
+			& "|crit:" & ( len( inlineCss ) ? "1" : "0" )
+			& "|skip:" & ( skipCritical ? "1" : "0" )
+			& "|inline:" & ( emittedInline ? "1" : "0" )
+			& "|evt:" & criticalEvent
+			& "|nonce:" & nonce;
 
 		if ( variables._tags.keyExists( cacheKey ) ) return variables._tags[ cacheKey ];
 
@@ -72,7 +101,23 @@ component extends="AbstractDriver" {
 			entry   = arguments.entry,
 			options = { renderModulePreload: renderPreload, includeImportedCss: includeCss }
 		);
-		var html = variables.renderer.viteProductionTags( bundle = b, attributes = attrs );
+
+		var html = "";
+		if ( len( inlineCss ) ) {
+			// Critical-CSS branch: inline <style> (when not suppressed) +
+			// preload-swap CSS + modulepreload + entry script. When no
+			// critical file exists for this event readCriticalCss() returns
+			// "" and we fall through to the standard branch — preserving
+			// byte-for-byte parity with non-critical apps.
+			html = variables.renderer.viteCriticalProductionTags(
+				inlineCss  = emittedInline ? inlineCss : "",
+				bundle     = b,
+				attributes = attrs,
+				options    = { nonce: nonce }
+			);
+		} else {
+			html = variables.renderer.viteProductionTags( bundle = b, attributes = attrs );
+		}
 		variables._tags[ cacheKey ] = html;
 		return html;
 	}
@@ -230,21 +275,26 @@ component extends="AbstractDriver" {
 	}
 
 	/**
-	 * Compute the absolute (un-expanded) hot-file path by joining moduleRoot
-	 * and settings.hotFilePath.
+	 * Return the absolute (un-expanded) hot-file path. Pinned on first call so
+	 * joinPath's regex doesn't run on every isHot()/url() check.
 	 */
 	private string function absoluteHotPath() {
-		return joinPath( variables.moduleRoot, variables.settings.hotFilePath );
+		if ( !variables.keyExists( "_absHot" ) ) {
+			variables._absHot = joinPath( variables.moduleRoot, variables.settings.hotFilePath );
+		}
+		return variables._absHot;
 	}
 
 	/**
-	 * Stable hash of an attributes struct, used as part of the tag cache key.
+	 * Stable key fragment for an attributes struct, used as part of the tag
+	 * cache key. The serialized JSON is stable enough — hashing it adds work
+	 * for no functional benefit, since struct keyExists is dictionary-fast.
 	 *
 	 * @s Attributes struct.
 	 */
-	private string function hashStruct( required struct s ) {
+	private string function attrsKey( required struct s ) {
 		if ( arguments.s.isEmpty() ) return "";
-		return hash( serializeJson( arguments.s ) );
+		return serializeJson( arguments.s );
 	}
 
 }

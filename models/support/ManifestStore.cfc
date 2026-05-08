@@ -17,6 +17,10 @@ component singleton {
 	variables._meta = {};
 	// reload listeners: keyed by absolute path -> array of callbacks
 	variables._listeners = {};
+	// memoized expandPath/cleanPath results: input string -> expanded path.
+	// Bounded by the number of distinct manifest paths (one per driver), so
+	// growth is fine. expandPath is O(filesystem) so caching matters.
+	variables._expandedCache = {};
 
 	/**
 	 * Constructor. Singleton; called once by WireBox at boot.
@@ -37,7 +41,7 @@ component singleton {
 		boolean devMode = false,
 		numeric devCheckInterval = 2000
 	) {
-		var expanded = expandPath( cleanPath( arguments.manifestPath ) );
+		var expanded = resolveExpanded( arguments.manifestPath );
 
 		// Cold path: not cached yet
 		if ( !variables._manifests.keyExists( expanded ) ) {
@@ -78,7 +82,7 @@ component singleton {
 	 * @callback     Function invoked with the parsed manifest struct on every load.
 	 */
 	function onReload( required string manifestPath, required any callback ) {
-		var expanded = expandPath( cleanPath( arguments.manifestPath ) );
+		var expanded = resolveExpanded( arguments.manifestPath );
 		if ( !variables._listeners.keyExists( expanded ) ) {
 			variables._listeners[ expanded ] = [];
 		}
@@ -93,11 +97,11 @@ component singleton {
 	 */
 	function refresh( string manifestPath = "" ) {
 		if ( len( arguments.manifestPath ) ) {
-			var expanded = expandPath( cleanPath( arguments.manifestPath ) );
-			loadLocked( expanded );
+			var expanded = resolveExpanded( arguments.manifestPath );
+			loadLocked( expanded, /*force*/ true );
 		} else {
 			for ( var key in variables._manifests ) {
-				loadLocked( key );
+				loadLocked( key, /*force*/ true );
 			}
 		}
 	}
@@ -111,11 +115,28 @@ component singleton {
 	 * during cold-cache first reads. Fires any onReload listeners after the
 	 * cache is consistent.
 	 *
+	 * Implements double-checked locking on the cold path so a second thread
+	 * that loses the lock race doesn't reparse. refresh() passes force=true to
+	 * bypass that check and force a re-read.
+	 *
+	 * Listener callbacks are dispatched after the lock is released so a slow
+	 * (or self-locking) listener can't block other waiters.
+	 *
 	 * @expanded Absolute (already expanded) path to the manifest file.
+	 * @force    When true, reparse even if another thread already populated the cache.
 	 */
-	private function loadLocked( required string expanded ) {
+	private function loadLocked( required string expanded, boolean force = false ) {
+		var parsed   = "";
+		var dispatch = [];
+
 		lock name="mixr.manifest.#hash( arguments.expanded )#" type="exclusive" timeout="30" {
-			var parsed = parseManifest( arguments.expanded );
+			// Double-check inside the lock: another thread may have populated
+			// the cache while we were waiting. Skip work unless forced.
+			if ( !arguments.force && variables._manifests.keyExists( arguments.expanded ) ) {
+				return;
+			}
+
+			parsed = parseManifest( arguments.expanded );
 			var mtime = fileExists( arguments.expanded )
 				? getFileInfo( arguments.expanded ).lastModified.getTime()
 				: 0;
@@ -123,12 +144,18 @@ component singleton {
 			variables._manifests[ arguments.expanded ] = parsed;
 			variables._meta[ arguments.expanded ] = { mtime: mtime, lastCheck: getTickCount() };
 
-			// fire listeners after store is consistent
+			// Snapshot listeners while we hold the lock; dispatch outside.
 			if ( variables._listeners.keyExists( arguments.expanded ) ) {
 				for ( var cb in variables._listeners[ arguments.expanded ] ) {
-					cb( parsed );
+					dispatch.append( cb );
 				}
 			}
+		}
+
+		// Fire listeners after the lock is released so a slow callback can't
+		// pile up other waiters on the same manifest.
+		for ( var cb in dispatch ) {
+			cb( parsed );
 		}
 	}
 
@@ -177,6 +204,25 @@ component singleton {
 	 */
 	private string function cleanPath( required string path ) {
 		return reReplace( arguments.path, "/{2,}", "/", "all" );
+	}
+
+	/**
+	 * Memoize cleanPath + expandPath for a given input. expandPath does
+	 * filesystem canonicalization and runs on every hot-path call into get(),
+	 * so caching the result is significant. Writes are guarded by a short
+	 * exclusive lock; reads are lock-free (idempotent racy writes are safe).
+	 *
+	 * @path Input path (relative or absolute).
+	 */
+	private string function resolveExpanded( required string path ) {
+		if ( variables._expandedCache.keyExists( arguments.path ) ) {
+			return variables._expandedCache[ arguments.path ];
+		}
+		var expanded = expandPath( cleanPath( arguments.path ) );
+		lock name="mixr.manifest.expand" type="exclusive" timeout="5" {
+			variables._expandedCache[ arguments.path ] = expanded;
+		}
+		return expanded;
 	}
 
 }

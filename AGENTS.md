@@ -76,19 +76,24 @@ Two things to know:
 
 ### Layer 3 — `models/Mixr.cfc` (facade) + `models/MixrScope.cfc`
 
-`Mixr.cfc` is the singleton facade. It does **not** do any manifest parsing itself anymore — it picks a driver per module and delegates. Three caches and one settings cascade are the core of it:
+`Mixr.cfc` is the singleton facade. It does **not** do any manifest parsing itself anymore — it picks a driver per module and delegates. The core state is:
 
 - `variables._scopes` — `MixrScope` instance per moduleName. `forModule()` is O(1) after first call. A `MixrScope` is a 2-property pointer (service + moduleName) that forwards fluent calls back into the service with the bound moduleName.
 - `variables._drivers` — driver instance per moduleName. First call to `driverFor()` resolves config, picks `ViteDriver` or `ManifestDriver`, and pins it. Every subsequent call is a struct lookup + delegate.
+- `variables._submoduleOwnSettings` — cache of each submodule's own `mixr` settings struct (lazy-loaded on first reference, pinned for app life).
 - `viteClient()` per-request dedupe via RequestContext private values: `event.setPrivateValue("mixr:viteClientRendered:#moduleName#", true)`.
 
-Settings cascade in `effectiveSettings()`: cached per-module once. Two-tier:
+**Settings resolution in `effectiveSettings()`** — every module is self-contained; there is **no cascade**. Settings resolve via a single chain (lowest to highest priority):
 
-- **Behavioral keys cascade from root**: `driver`, `devMode`, `devServerUrl`, `renderModulePreload`, `includeImportedCss`, `cache`. The host app's value applies to every submodule that doesn't override it.
-- **Module-relative paths do NOT cascade**: `manifestPath`, `buildPath`, `hotFilePath`, `prependModuleRoot`, `prependPath`. A submodule with no explicit setting falls back to system defaults from `systemPathDefaults()` (kept in sync with `ModuleConfig.cfc`'s declared defaults), NOT to whatever the root app set. This avoids the broken case where a host's manifestPath would be joined onto a submodule's moduleRoot.
-- **Explicit submodule settings (from `moduleSettings.mixr.modules.<name>` or the submodule's own `variables.settings.mixr`) win over both.**
+1. **System defaults** — declared in mixr's `ModuleConfig.cfc` (mirrored in `Mixr.cfc`'s private `systemDefaults()` helper).
+2. **Module's own settings** — for the root, `moduleSettings.mixr.*`. For a submodule, `variables.settings.mixr.*` from its own `ModuleConfig.cfc` (lazy-loaded via `coldbox:moduleSettings:<name>` DSL, cached in `_submoduleOwnSettings`).
+3. **Host overrides** — `moduleSettings.mixr.modules.<name>.*` from the root app's config. Only mechanism by which one module's config affects another. Wins per-key.
 
-Submodule settings are loaded lazily via the WireBox ColdBox DSL (`coldbox:moduleSettings:<name>`). The `modules` key itself is never inherited.
+Substructs (`cache`, `criticalCss`) are merged **key-by-key** at each tier (via `mergeInto()`), not replaced wholesale — so a partial override like `{ cache: { devCheckInterval: 5000 } }` keeps the default `cache.enabled = true`.
+
+The `modules` key is stripped from any module's effective settings — it is a top-level routing concept, not part of any module's per-module config.
+
+**Don't reintroduce a cascade.** The old "behavioral keys cascade from root" design was removed because it surprised installed-from-ForgeBox modules (a host's `devMode = true` would force a third-party admin module to try emitting Vite dev-server URLs even though that module didn't ship a Vite dev server). The current design favors predictability over the convenience of "set `devMode` once."
 
 `Mixr.cfc` does **not** extend `coldbox.system.FrameworkSupertype`. Submodule settings come from the WireBox ColdBox DSL above. Don't reintroduce the inheritance.
 
@@ -103,7 +108,7 @@ Backward-compat: `Mixr.get(asset, moduleName)` is preserved as an alias for `pat
 
 ### Layer 4 — drivers + support singletons
 
-**`models/drivers/AbstractDriver.cfc`** holds the per-driver state every driver needs: `settings`, `moduleRoot`, the support collaborators, and three derived caches (`_paths`, `_bundles`, `_tags`). It also subscribes to `ManifestStore.onReload(absoluteManifestPath, callback=clearCaches)` so that a hot-reloaded manifest invalidates the driver's derived caches automatically. Every driver extends this.
+**`models/drivers/AbstractDriver.cfc`** holds the per-driver state every driver needs: `settings`, `moduleRoot`, the support collaborators, and four derived caches (`_paths`, `_bundles`, `_tags`, `_criticalCache`). It also subscribes to `ManifestStore.onReload(absoluteManifestPath, callback=clearCaches)` so that a hot-reloaded manifest invalidates the driver's derived caches automatically. Every driver extends this. Also exposes `readCriticalCss(eventName)` — reads the per-route critical CSS file (under `settings.criticalCss.path` joined with `eventName + settings.criticalCss.suffix`), caches the contents per event with dev-mode mtime throttling, and rejects files containing literal `</style>` (throws `MalformedCriticalCss`). Returns `""` when disabled, in dev (`isHot()`), no event, or file missing — so drivers fall through to standard rendering.
 
 **`models/drivers/ManifestDriver.cfc`** — flat src→dist lookup with optional `prependModuleRoot` / `prependPath`. Throws `ManifestAssetNotFound` for unknown keys. `isHot()` is always false; `viteClient()` is always empty.
 
@@ -135,6 +140,25 @@ mixr().tags("resources/js/app.js")
 ```
 
 After warmup: one struct lookup, one delegate, one bundle-cache hit, one renderer call. No disk I/O, no manifest parse.
+
+### Per-call flow (critical CSS, prod, file present, first call this request)
+
+```
+mixr().tags("resources/js/app.js")  [criticalCss.enabled=true, prod, file present, first call this request]
+ → Mixins.cfm   (cached service ref + auto-detect moduleName)
+ → Mixr.tags(entry, moduleName, options)
+   → resolves currentEvent via try/catch on RequestContext
+   → checks/sets per-request "criticalInlined" private value (dedupes inline)
+ → Mixr.driverFor(moduleName)            ← struct lookup after warmup
+ → ViteDriver.tags(entry, options)
+ → ViteDriver.bundle(entry, options)     ← cached per (entry, options-hash)
+   → AbstractDriver.getManifest()        ← cached in ManifestStore
+   → walkCss / walkPreload (struct bag)
+ → AbstractDriver.readCriticalCss(eventName) ← cached + mtime-throttled
+ → TagRenderer.viteCriticalProductionTags(inlineCss, bundle, attrs, {nonce})
+```
+
+The diff vs. the standard flow above is: (1) Mixr.tags() resolves the current event and per-request inline-dedupe state before delegating; (2) the driver consults `readCriticalCss()` (which returns `""` when off, in dev, file-missing, or not-yet-warmup); (3) the renderer swaps `viteProductionTags()` for `viteCriticalProductionTags()` when `inlineCss` is non-empty. When the file is missing or `criticalCss.enabled=false`, `inlineCss` is `""` and output falls through byte-for-byte to the standard flow above.
 
 ## Test harness layout
 
@@ -194,7 +218,7 @@ The 3.0 release is non-breaking for the 2.x string form of `mixr()`. Specificall
 
 - `mixr( asset )` and `mixr( asset, moduleName )` continue to return a resolved path string.
 - Apps with no Mixr configuration changes will get `driver: "auto"`, which falls back to the manifest driver when their existing flat manifest is present and no Vite hot file/manifest exists.
-- The exception types `ManifestNotFound`, `ManifestAssetNotFound`, and (new) `EntryNotFound`, `MalformedManifest`, `InvalidDriver` are part of the contract — preserve types if refactoring throw sites.
+- The exception types `ManifestNotFound`, `ManifestAssetNotFound`, `EntryNotFound`, `MalformedManifest`, `InvalidDriver`, and `MalformedCriticalCss` are part of the contract — preserve types if refactoring throw sites.
 - `Mixr.get(asset, moduleName)` is preserved as an alias for `path()`.
 
 ## Branch context
