@@ -157,25 +157,38 @@ component
 	}
 
 	/**
-	 * Return the inline critical CSS body for the current (or specified)
-	 * event. Returns "" when `criticalCss.enabled` is false, when the driver
-	 * is in dev mode, when no event can be resolved, or when the per-event
-	 * file is missing. Use this when you want the inline content but are
-	 * rendering your own tags (i.e. not calling `tags()`).
+	 * Return the inline critical CSS body for the given (or current) event.
+	 * Returns "" when `criticalCss.enabled` is false, when the driver is in
+	 * dev mode, when no event can be resolved, or when the per-event file is
+	 * missing. Use this when you want the inline content but are rendering
+	 * your own tags (i.e. not calling `tags()`).
 	 *
 	 * Pure read by default — does NOT touch the per-request inline-dedupe
 	 * flag. Pass `options.markRendered = true` to also set the flag, so a
 	 * subsequent `tags()` call in the same request suppresses its inline
 	 * `<style>`. The flag is only set when the returned string is non-empty.
 	 *
+	 * @eventName  ColdBox event name (e.g. "main.index"). Empty (default)
+	 *             auto-detects from RequestContext.
 	 * @moduleName Module whose driver should be queried. Defaults to root app.
-	 * @options    Optional struct: { criticalEvent, skipCritical, markRendered }.
+	 * @options    Optional struct: { skipCritical, markRendered }. Note that
+	 *             `criticalEvent` here is set by the eventName argument — pass
+	 *             eventName positionally rather than via options.
 	 */
-	string function criticalCss( string moduleName = "", struct options = {} ) {
+	string function criticalCss(
+		string eventName  = "",
+		string moduleName = "",
+		struct options    = {}
+	) {
 		var opts = duplicate( arguments.options );
 
-		// Inject the current event name when caller didn't override.
-		if ( !opts.keyExists( "criticalEvent" ) ) {
+		// eventName is the public-facing positional name; translate to the
+		// internal driver-level key (criticalEvent) for symmetry with how
+		// tags() and bundle() pass it through options. An explicit eventName
+		// arg always wins; only fall back to auto-detect when both are empty.
+		if ( len( arguments.eventName ) ) {
+			opts.criticalEvent = arguments.eventName;
+		} else if ( !opts.keyExists( "criticalEvent" ) ) {
 			try {
 				opts.criticalEvent = controller.getRequestService().getContext().getCurrentEvent();
 			} catch ( any e ) {

@@ -168,15 +168,12 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				} );
 
 				it( "criticalCss() returns the inline body for the explicit event", function(){
-					var s = mixr.criticalCss(
-						moduleName = "vite",
-						options    = { criticalEvent: "main.index" }
-					);
+					var s = mixr.criticalCss( eventName = "main.index", moduleName = "vite" );
 					expect( s ).toInclude( ".fold{color:##0a0" );
 				} );
 
 				it( "criticalCss() does NOT set the dedupe flag by default", function(){
-					mixr.criticalCss( moduleName = "vite", options = { criticalEvent: "main.index" } );
+					mixr.criticalCss( eventName = "main.index", moduleName = "vite" );
 					var html = mixr.tags(
 						entry      = "resources/js/app.js",
 						moduleName = "vite",
@@ -188,8 +185,9 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 
 				it( "criticalCss( markRendered: true ) sets the dedupe flag so a later tags() suppresses inline", function(){
 					var s = mixr.criticalCss(
+						eventName  = "main.index",
 						moduleName = "vite",
-						options    = { criticalEvent: "main.index", markRendered: true }
+						options    = { markRendered: true }
 					);
 					expect( s ).toInclude( ".fold{color:##0a0" );
 
@@ -207,41 +205,43 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					var event = getRequestContext();
 					event.removePrivateValue( "mixr:criticalInlined:vite" );
 					var s = mixr.criticalCss(
+						eventName  = "missing.event",
 						moduleName = "vite",
-						options    = { criticalEvent: "missing.event", markRendered: true }
+						options    = { markRendered: true }
 					);
 					expect( s ).toBe( "" );
 					expect( event.privateValueExists( "mixr:criticalInlined:vite" ) ).toBeFalse();
 				} );
 
-				it( "fluent scope: mixr.forModule('vite').criticalCss() resolves the same inline body", function(){
+				it( "fluent scope: mixr.forModule('vite').criticalCss( eventName ) resolves the same inline body", function(){
 					var scope = mixr.forModule( "vite" );
-					expect( scope.criticalCss( { criticalEvent: "main.index" } ) ).toInclude( ".fold{color:##0a0" );
+					expect( scope.criticalCss( "main.index" ) ).toInclude( ".fold{color:##0a0" );
 				} );
 			} );
 
 			describe( "global mixr() helper", function(){
-				// All four call shapes are exercised in a single handler action
-				// to avoid TestBox + Adobe 2021 stub regeneration issues with
-				// multiple execute() calls in the same suite.
-				it( "resolves assets for the current module and across modules via moduleName", function(){
-					var e = execute( event = "main.mixrHelperAllShapes", renderResults = false );
-
-					// no moduleName → current module (root)
+				it( "legacy string form resolves an asset for the current module", function(){
+					var e = execute( event = "main.mixrCurrent", renderResults = false );
 					expect( e.getPrivateValue( "mixrCurrent" ) ).toInclude( "/tests/asset.js?id=" );
+				} );
 
-					// fluent, no moduleName
+				it( "fluent form resolves an asset for the current module", function(){
+					var e = execute( event = "main.mixrCurrentFluent", renderResults = false );
 					expect( e.getPrivateValue( "mixrCurrentFluent" ) ).toInclude( "/tests/asset.js?id=" );
+				} );
 
-					// legacy form with explicit moduleName → different module
+				it( "legacy form with explicit moduleName resolves an asset from another module", function(){
+					var e = execute( event = "main.mixrOtherLegacy", renderResults = false );
 					expect( e.getPrivateValue( "mixrOtherLegacy" ) ).toInclude( "/includes/build/assets/app-PROD123.js" );
+				} );
 
-					// fluent form with explicit moduleName → different module
+				it( "fluent form with explicit moduleName resolves an asset from another module", function(){
+					var e = execute( event = "main.mixrOtherFluent", renderResults = false );
 					expect( e.getPrivateValue( "mixrOtherFluent" ) ).toInclude( "/includes/build/assets/app-PROD123.js" );
+				} );
 
-					// fluent tags() with critical-CSS options → harness root has criticalCss.enabled=true
-					// and a fixture at /includes/critical/main.index.critical.css, so this
-					// inlines the <style> + preload-swaps the CSS link.
+				it( "fluent tags() with critical-CSS options inlines <style> and preload-swaps the CSS link", function(){
+					var e    = execute( event = "main.mixrCssWithCritical", renderResults = false );
 					var crit = e.getPrivateValue( "mixrCssWithCritical" );
 					expect( crit ).toInclude( "<style>" );
 					expect( crit ).toInclude( ".critical" );

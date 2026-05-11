@@ -15,22 +15,37 @@ component{
 	}
 
     /**
-     * Test endpoint — exercises every shape of the global mixr() helper in a
-     * single handler action. Keeping these in one execute() avoids a TestBox
-     * + Adobe 2021 incompatibility where multiple execute() calls in the same
-     * suite regenerate stub CFMs with the same hash.
-     * 
-     * @event - event
-     * @rc - request collection
-     * @prc - private request collection
+     * Resolves an asset for the current module via the legacy string form.
      */
-	function mixrHelperAllShapes( event, rc, prc ) {
-		prc.mixrCurrent         = mixr( "/tests/asset.js" );
-		prc.mixrOtherLegacy     = mixr( asset = "resources/js/app.js", moduleName = "vite" );
-		prc.mixrOtherFluent     = mixr( moduleName = "vite" ).path( "resources/js/app.js" );
-		prc.mixrCurrentFluent   = mixr().path( "/tests/asset.js" );
-		// Critical CSS goes through tags() (the fluent form), not the legacy
-		// mixr(asset, moduleName) form — that one only resolves a path string.
+	function mixrCurrent( event, rc, prc ) {
+		prc.mixrCurrent = mixr( "/tests/asset.js" );
+	}
+
+	/**
+	 * Resolves an asset for the current module via the fluent form.
+	 */
+	function mixrCurrentFluent( event, rc, prc ) {
+		prc.mixrCurrentFluent = mixr().path( "/tests/asset.js" );
+	}
+
+	/**
+	 * Resolves an asset for an explicit module via the legacy form.
+	 */
+	function mixrOtherLegacy( event, rc, prc ) {
+		prc.mixrOtherLegacy = mixr( asset = "resources/js/app.js", moduleName = "vite" );
+	}
+
+	/**
+	 * Resolves an asset for an explicit module via the fluent form.
+	 */
+	function mixrOtherFluent( event, rc, prc ) {
+		prc.mixrOtherFluent = mixr( moduleName = "vite" ).path( "resources/js/app.js" );
+	}
+
+	/**
+	 * Renders fluent tags() with critical-CSS options.
+	 */
+	function mixrCssWithCritical( event, rc, prc ) {
 		prc.mixrCssWithCritical = mixr().tags( "/css/app.css", { criticalEvent: "main.index" } );
 	}
 

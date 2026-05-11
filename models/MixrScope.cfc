@@ -81,18 +81,21 @@ component {
 	}
 
 	/**
-	 * Return the inline critical CSS body for the bound module and current
-	 * (or specified) event. Returns "" when disabled / in dev / event missing
-	 * / file missing. Use when you want the inline content but are rendering
+	 * Return the inline critical CSS body for the bound module and given
+	 * (or current) event. Returns "" when disabled / in dev / event missing /
+	 * file missing. Use when you want the inline content but are rendering
 	 * your own tags rather than calling tags().
 	 *
 	 * Pass `options.markRendered = true` to also set the per-request inline
 	 * dedupe flag so a subsequent tags() call suppresses its own inline.
 	 *
-	 * @options Optional struct: { criticalEvent, skipCritical, markRendered }.
+	 * @eventName ColdBox event name (e.g. "main.index"). Empty (default)
+	 *            auto-detects from RequestContext.
+	 * @options   Optional struct: { skipCritical, markRendered }.
 	 */
-	string function criticalCss( struct options = {} ){
+	string function criticalCss( string eventName = "", struct options = {} ){
 		return variables.service.criticalCss(
+			eventName  = arguments.eventName,
 			moduleName = variables.moduleName,
 			options    = arguments.options
 		);

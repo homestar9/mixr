@@ -8,7 +8,7 @@
     </div>
     <!--- bundle() — { js, css[], preload[], criticalCss } --->
     <div>
-        #writeDump( mixr().bundle( "/css/app.css" ) )#
+        <cfdump var="#mixr().bundle( "/css/app.css" )#">
     </div>
     <!--- criticalCss() — just the inline CSS body for the current event --->
     <cfset critical = mixr().criticalCss()>
