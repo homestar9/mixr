@@ -1,10 +1,10 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to when working with code in this repository. It is meant to be a living document and should be updated by the LLM when it makes notable changes to the codebase, functionality, patterns, or when it identifies important information that should be documented for future maintainers.
 
 ## What this is
 
-Mixr is a ColdBox module (CFML) that resolves static asset paths through either a flat src→dist manifest (Laravel Mix, ColdBox Elixir, custom bundlers) **or** a Vite manifest, with optional Vite dev-server hot reload. It is published to ForgeBox as `mixr` and consumed by ColdBox apps via `box install mixr`. The module registers a global `mixr()` helper that handlers/views call to resolve asset paths or render full tag sets.
+Mixr is a ColdBox module (CFML) that resolves static asset paths through either a flat src→dist manifest (Laravel Mix, ColdBox Elixir, custom bundlers) **or** a Vite manifest, with optional Vite dev-server hot reload. It can also output critical CSS based on convention. It is published to ForgeBox as `mixr` and consumed by ColdBox apps via `box install mixr`. The module registers a global `mixr()` helper that handlers/views call to resolve asset paths or render full tag sets.
 
 ## Common commands
 
@@ -31,11 +31,6 @@ box run-script forget:lucee5
 # run a single bundle/spec via URL params
 # http://localhost:60299/tests/runner.cfm?bundles=tests.specs.unit.drivers.ViteDriverTest
 # http://localhost:60299/tests/runner.cfm?directory=tests.specs.unit
-
-# formatting (cfformat) — run before committing
-box run-script format          # apply formatting in place
-box run-script format:check    # CI-style check, no writes
-box run-script format:watch    # watch mode
 
 # release / build
 box run-script build:module    # produces distributable artifact
@@ -67,6 +62,7 @@ mixr().path( "resources/js/app.js" )                      // fluent, current mod
 mixr().bundle( "resources/js/app.js" )                    // fluent — { js, css[], preload[], criticalCss } struct
 mixr().tags( "resources/js/app.js" )                      // fluent — fully-rendered HTML
 mixr().criticalCss()                                      // fluent — inline critical CSS body for current event
+mixr().criticalCss( "main.index" )                        // fluent — inline body for an explicit event (eventName positional)
 mixr( moduleName = "admin" ).tags( "resources/js/admin.js" )  // fluent, explicit module
 mixr( "/js/app.js" )                                       // legacy 2.x string form
 mixr( "/js/admin.js", "admin" )                            // legacy with explicit module
@@ -170,11 +166,11 @@ The diff vs. the standard flow above is: (1) Mixr.tags() resolves the current ev
 Callers who reach for `bundle()` (rendering their own `<script>`/`<link>`/`<style>` rather than using `tags()`) have two access points to the inline critical CSS body — symmetrical with what `tags()` produces internally:
 
 1. **`bundle().criticalCss`** — a string field on the bundle struct. Empty when `criticalCss.enabled=false`, in dev, no event, or file missing. Same rules as `readCriticalCss()`. Driven by `options.criticalEvent` (auto-detected from RequestContext when omitted) and `options.skipCritical`.
-2. **`mixr().criticalCss( options )`** — standalone fluent method. Returns the same string without forcing a manifest read. Use when you only want the inline body. Lives on `Mixr.cfc`, `MixrScope.cfc`, and is exposed by `mixr()` via the fluent shape.
+2. **`mixr().criticalCss( eventName, options )`** — standalone fluent method. Returns the same string without forcing a manifest read. Use when you only want the inline body. The first positional arg is the event name (empty default → auto-detect from RequestContext); `options` carries `skipCritical` and `markRendered`. The asymmetry with `bundle()`/`tags()` is intentional: critical CSS is event-keyed, so for `criticalCss()` the event IS the primary identifier — same role `entry` plays in `path()`/`tags()`/`bundle()`. Lives on `Mixr.cfc` and `MixrScope.cfc`; the fluent shape is `mixr().criticalCss( "main.index" )`.
 
-**Per-request dedupe is opt-in for these methods.** `tags()` auto-sets `mixr:criticalInlined:#moduleName#` so a second `tags()` call in the same request suppresses its inline. `bundle()` and `criticalCss()` are pure reads by default — they do NOT touch the flag. Callers combining `criticalCss()` (manual rendering) with a later `tags()` call should pass `options.markRendered = true` on the `criticalCss()` call so `tags()` will suppress its inline. The flag is only set when the returned string is non-empty.
+**Per-request dedupe is opt-in for these methods.** `tags()` auto-sets `mixr:criticalInlined:#moduleName#` so a second `tags()` call in the same request suppresses its inline. `bundle()` and `criticalCss()` are pure reads by default — they do NOT touch the flag. Callers combining `criticalCss()` (manual rendering) with a later `tags()` call should pass `options.markRendered = true` on the `criticalCss()` call (e.g. `mixr().criticalCss( "main.index", { markRendered: true } )`) so `tags()` will suppress its inline. The flag is only set when the returned string is non-empty.
 
-The `bundle()` method does NOT accept `markRendered` — bundle is a pure data shape. If you want both the data and the dedupe-mark, call `criticalCss( markRendered: true )` first, then `bundle()`.
+The `bundle()` method does NOT accept `markRendered` — bundle is a pure data shape. If you want both the data and the dedupe-mark, call `criticalCss( eventName, { markRendered: true } )` first, then `bundle()`.
 
 ## Test harness layout
 
@@ -201,8 +197,6 @@ This is a harness quirk, not a mixr bug. Do not push the forced reload into `mix
 - `tests/specs/unit/drivers/` — `ManifestDriverTest`, `ViteDriverTest`. Construct drivers directly with mocked support objects. Use this for pure logic.
 - `tests/specs/unit/support/` — `ManifestStoreTest`, `HotFileWatcherTest`, `TagRendererTest`.
 - `tests/specs/integration/MixrIntegrationTest.cfc` — end-to-end through the live ColdBox app and the global `mixr()` helper.
-
-Adobe ColdFusion 2021 has a TestBox stub bug where multiple `execute()` calls inside one `it()` produce `DynamicDuplicateFunctionDefinitionException`. Consolidate to a single `execute()` per spec when an integration test needs to drive a handler — see the global-helper spec in `MixrIntegrationTest.cfc`.
 
 ## Engine support
 
