@@ -2,13 +2,14 @@
 
 ![Mixr Logo](https://github.com/homestar9/mixr/blob/master/mixr-logo.webp?raw=true)
 
-**Mixr** resolves logical asset paths (`resources/js/app.js`) to the hashed
-files your bundler emits and renders the `<script>` / `<link>` tags for you.
+**Mixr** takes logical asset paths like `resources/js/app.js`, looks up the
+hashed file your bundler emitted, and renders the `<script>` / `<link>`
+tags for you.
 
-First-class support for **Vite** (production manifest + dev-server hot
-reload), **Webpack**, **Laravel Mix**, **ColdBox Elixir**, and any custom flat-key
-manifest. Registers a global `mixr()` helper available in every handler,
-layout, view, and interceptor.
+It works with **Vite** (production manifest plus dev-server hot reload),
+**Webpack**, **Laravel Mix**, **ColdBox Elixir**, or any flat-key manifest
+you want to point it at. The `mixr()` helper is available everywhere:
+handlers, layouts, views, interceptors.
 
 ---
 
@@ -46,18 +47,18 @@ In your layout:
 <!DOCTYPE html>
 <html>
 <head>
-    #mixr().viteClient()# <!-- ignored in when devMode is false -->
+    #mixr().viteClient()# <!-- ignored when devMode is false -->
     #mixr().tags( "resources/js/app.js" )# <!-- css + preload + module script -->
 </head>
 <body>...</body>
 </html>
 ```
 
-That's it. In **dev** (when Vite has written its hot file), Mixr emits
-dev-server URLs and `@vite/client`. In **prod**, it reads `manifest.json`
-and emits hashed `<link rel="stylesheet">`, `<link rel="modulepreload">`,
-and `<script type="module">` tags with CSS chunks and module preloads
-collected automatically.
+That's it. In **dev**, Mixr sees Vite's hot file and emits dev-server URLs
+plus `@vite/client`. In **prod**, it reads `manifest.json` and emits the
+hashed `<link rel="stylesheet">`, `<link rel="modulepreload">`, and
+`<script type="module">` tags, pulling in CSS chunks and module preloads
+for you.
 
 ---
 
@@ -79,8 +80,8 @@ There are three supported calling styles, all of which work with any driver:
 #mixr( "/js/admin.js", "admin" )#
 ```
 
-When `moduleName` is omitted, Mixr auto-detects the module handling the
-current request, so submodule configs are picked up without extra wiring.
+Skip `moduleName` and Mixr figures out which module is handling the
+current request, so submodule configs just work.
 
 ### Fluent methods
 
@@ -98,8 +99,9 @@ current request, so submodule configs are picked up without extra wiring.
 
 ## Configuration
 
-The Quick start above is a working starter. Below is every setting with
-its default — set only the keys you need to change.
+Quick start covers the working defaults. Here's the full list, in case
+you need to tune something. You only have to set the keys you're actually
+changing.
 
 | Setting | Default | Description |
 | --- | --- | --- |
@@ -120,16 +122,16 @@ its default — set only the keys you need to change.
 | `criticalCss.suffix` | `".critical.css"` | Suffix appended to the event name to form the file name. |
 | `modules` | `{}` | Per-submodule overrides keyed by module name. See section below. |
 
-Substructs (`cache`, `criticalCss`) merge **key-by-key**, so a partial
-override like `cache: { devCheckInterval: 5000 }` keeps the default
-`cache.enabled = true`.
+Heads up: the `cache` and `criticalCss` substructs merge **key-by-key**.
+If you override just `cache: { devCheckInterval: 5000 }`, the default
+`cache.enabled = true` still applies.
 
 ---
 
 ## Submodule overrides
 
-Configure a submodule from the host app by adding a key under
-`mixr.modules.<moduleName>`:
+Need different settings per submodule? Drop them under
+`mixr.modules.<moduleName>` in the host app:
 
 ```js
 moduleSettings = {
@@ -143,9 +145,10 @@ moduleSettings = {
 };
 ```
 
-A submodule can also declare its own `mixr` settings in its
-`ModuleConfig.cfc` (`variables.settings.mixr = {...}`). Each module is
-self-contained. Settings do **not** cascade from the root app.
+Submodules can also bring their own settings via
+`variables.settings.mixr = {...}` in their own `ModuleConfig.cfc`. Each
+module's config is independent: the root app's settings don't cascade
+down.
 
 ---
 
@@ -167,21 +170,22 @@ moduleSettings = {
 <script src="#mixr( '/js/app.js' )#"></script>
 ```
 
-The legacy 2.x string form (`mixr( "/path" )`) is unchanged and is the
-most ergonomic shape for flat manifests. The fluent API works here too if
-you prefer consistency across drivers.
+If you're coming from 2.x, the old string form (`mixr( "/path" )`) still
+works and honestly reads nicest with flat manifests. Use the fluent API
+if you want consistency across drivers.
 
 ---
 
 ## Critical CSS (above-the-fold inlining)
 
-A page-speed optimization that inlines a small per-route stylesheet into
-`<head>` as a `<style>` block, then async-loads the full stylesheet
-(preload + onload swap with `<noscript>` fallback). Pair Mixr with any
-tool that emits per-route CSS files —
+Critical CSS is one of those page-speed wins that's still worth doing in
+2026. The idea: inline the above-the-fold styles into `<head>` as a
+`<style>` block, then async-load the rest (preload + onload swap, with a
+`<noscript>` fallback for JS-off). Mixr handles the rendering side. Pair
+it with any tool that emits per-route CSS files:
 [`vite-plugin-critical`](https://www.npmjs.com/package/vite-plugin-critical),
 [`laravel-mix-critical`](https://github.com/Pomax/laravel-mix-critical),
-or your own.
+or roll your own.
 
 ### Enable it
 
@@ -211,8 +215,9 @@ With critical CSS enabled and a fixture for the current event:
 <script type="module" src="/includes/build/assets/app-abc.js"></script>
 ```
 
-When no file exists for the current event, output is byte-for-byte
-identical to the no-critical case — Mixr falls through silently.
+If there's no critical file for the current event, Mixr falls through
+silently and you get the exact same output as if critical CSS were off.
+No surprises.
 
 ### Per-call options
 
@@ -222,10 +227,11 @@ Pass via `mixr().tags( entry, { … } )`:
 - `skipCritical` *(default: `false`)* — force standard output for this call.
 - `nonce` *(default: `""`)* — CSP nonce applied to both the `<style>` and the preload `<link>`.
 
-> **Dev note:** Critical CSS is always skipped while Vite's hot file is
-> present, because HMR injects CSS through JS. To preview production
-> behavior locally, build with your production-build command (e.g.
-> `npm run prod`).
+> **Dev note:** Critical CSS gets skipped whenever Vite's hot file is
+> around. HMR is already injecting CSS through JS, so inlining stale
+> critical files would just fight it. Want to preview the production
+> behavior locally? Run a production build (`npm run prod` or whatever
+> your project uses).
 
 For per-request dedupe across multiple `tags()` calls, advanced render
 patterns, and the `</style>` safety check, see [`AGENTS.md`](AGENTS.md).
@@ -234,10 +240,10 @@ patterns, and the `</style>` safety check, see [`AGENTS.md`](AGENTS.md).
 
 ## Upgrade guide: 2.x → 3.0
 
-3.0 is **non-breaking for the legacy string form**. Existing apps that
-call `mixr( "/js/app.js" )` continue to work — the default
-`driver: "auto"` falls back to the flat-manifest driver when no Vite
-manifest or hot file is present.
+Good news first: if you're on 2.x and calling `mixr( "/js/app.js" )`, you
+don't have to change anything. The default `driver: "auto"` falls back to
+the flat-manifest driver when no Vite manifest or hot file is around, so
+your existing app keeps working.
 
 What's new:
 
@@ -250,13 +256,14 @@ What's new:
   `<noscript>` fallback. Drop per-route files at
   `includes/critical/<event>.critical.css`.
 - **Submodule settings are self-contained.** Earlier 3.0 drafts cascaded
-  "behavioral" keys (`devMode` etc.) from the host to submodules; 3.0
-  final drops the cascade. Configure each submodule explicitly, or via
-  `mixr.modules.<name>`. See [`AGENTS.md`](AGENTS.md).
+  "behavioral" keys (`devMode` and friends) from the host into
+  submodules. The final release drops that. Configure each submodule
+  explicitly, or use `mixr.modules.<name>` from the host. See
+  [`AGENTS.md`](AGENTS.md) for the resolution chain.
 
-The default Vite manifest path is `/includes/build/.vite/manifest.json`.
-For Mix/Elixir apps upgrading without switching bundlers, point
-`manifestPath` at the existing manifest:
+The Vite manifest default is `/includes/build/.vite/manifest.json`. If
+you're upgrading a Mix or Elixir app and not switching bundlers, just
+point `manifestPath` at the manifest you already have:
 
 ```js
 mixr = {
