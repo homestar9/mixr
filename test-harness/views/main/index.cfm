@@ -20,6 +20,25 @@
         #mixr().tags( "/js/app.js" )#
     </div>
 
+    <h2>Head/body split — cssTags() + jsTags()</h2>
+    <!---
+        Recommended template shape: cssTags() goes in <head>, jsTags() goes
+        just before </body>. Here they're side-by-side for visual diffing.
+    --->
+    <div style="margin-bottom:.5em">
+        <strong>cssTags( "/css/app.css" ):</strong>
+        <pre>#encodeForHtml( mixr().cssTags( "/css/app.css" ) )#</pre>
+    </div>
+    <div style="margin-bottom:.5em">
+        <strong>jsTags( "/js/app.js" ):</strong>
+        <pre>#encodeForHtml( mixr().jsTags( "/js/app.js" ) )#</pre>
+    </div>
+    <div>
+        <strong>vite submodule cssTags + jsTags:</strong>
+        <pre>#encodeForHtml( mixr( moduleName = "vite" ).cssTags( "resources/js/app.js", { skipCritical: true } ) )#</pre>
+        <pre>#encodeForHtml( mixr( moduleName = "vite" ).jsTags( "resources/js/app.js", { skipCritical: true } ) )#</pre>
+    </div>
+
     <h2>Legacy Mixr 2.0 Tests</h2>
 
     <!--- Assets in this module --->

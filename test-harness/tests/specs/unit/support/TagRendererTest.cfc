@@ -112,6 +112,93 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				} );
 			} );
 
+			describe( "viteCssTags() + viteJsTags() split", function(){
+				it( "emits plain <link rel=stylesheet> tags when inlineCss is empty", function(){
+					var html = r.viteCssTags(
+						inlineCss = "",
+						bundle    = {
+							js      : "/build/app.js",
+							css     : [ "/build/app.css", "/build/extra.css" ],
+							preload : [ "/build/vendor.js" ]
+						}
+					);
+					expect( html ).toInclude( "<link rel=""stylesheet"" href=""/build/app.css"" />" );
+					expect( html ).toInclude( "<link rel=""stylesheet"" href=""/build/extra.css"" />" );
+					expect( html ).notToInclude( "<script" );
+					expect( html ).notToInclude( "modulepreload" );
+				} );
+
+				it( "emits inline <style> + preload-swap when inlineCss is non-empty", function(){
+					var html = r.viteCssTags(
+						inlineCss = ".a{}",
+						bundle    = {
+							js      : "/build/app.js",
+							css     : [ "/build/app.css" ],
+							preload : [ "/build/vendor.js" ]
+						}
+					);
+					expect( html ).toInclude( "<style>.a{}</style>" );
+					expect( html ).toInclude( "rel=""preload""" );
+					expect( html ).toInclude( "as=""style""" );
+					expect( html ).notToInclude( "<script" );
+					expect( html ).notToInclude( "modulepreload" );
+				} );
+
+				it( "returns empty string when both inlineCss and bundle.css are empty", function(){
+					var html = r.viteCssTags(
+						inlineCss = "",
+						bundle    = { js : "/build/app.js", css : [], preload : [ "/build/vendor.js" ] }
+					);
+					expect( html ).toBe( "" );
+				} );
+
+				it( "emits modulepreload links followed by the entry script", function(){
+					var html = r.viteJsTags(
+						bundle = {
+							js      : "/build/app.js",
+							css     : [ "/build/app.css" ],
+							preload : [ "/build/vendor.js", "/build/util.js" ]
+						}
+					);
+					expect( html ).toInclude( "<link rel=""modulepreload"" href=""/build/vendor.js"" />" );
+					expect( html ).toInclude( "<link rel=""modulepreload"" href=""/build/util.js"" />" );
+					expect( html ).toInclude( "<script type=""module"" src=""/build/app.js""></script>" );
+					expect( html ).notToInclude( "rel=""stylesheet""" );
+					expect( html ).notToInclude( "<style" );
+				} );
+
+				it( "viteCssTags + viteJsTags equals viteProductionTags byte-for-byte (no critical)", function(){
+					var bundle = {
+						js      : "/build/app.js",
+						css     : [ "/build/app.css" ],
+						preload : [ "/build/vendor.js" ]
+					};
+					var combined = r.viteCssTags( inlineCss = "", bundle = bundle )
+						& r.viteJsTags( bundle = bundle );
+					expect( combined ).toBe( r.viteProductionTags( bundle = bundle ) );
+				} );
+
+				it( "viteCssTags + viteJsTags equals viteCriticalProductionTags byte-for-byte (with critical)", function(){
+					var bundle = {
+						js      : "/build/app.js",
+						css     : [ "/build/app.css" ],
+						preload : [ "/build/vendor.js" ]
+					};
+					var combined = r.viteCssTags( inlineCss = ".a{}", bundle = bundle )
+						& r.viteJsTags( bundle = bundle );
+					expect( combined ).toBe( r.viteCriticalProductionTags( inlineCss = ".a{}", bundle = bundle ) );
+				} );
+
+				it( "viteJsTags applies extra attributes to the entry script", function(){
+					var html = r.viteJsTags(
+						bundle     = { js : "/build/app.js", css : [], preload : [] },
+						attributes = { defer : true, "data-x" : "<bad>" }
+					);
+					expect( html ).toInclude( "defer" );
+					expect( html ).toInclude( "data-x=""&lt;bad&gt;""" );
+				} );
+			} );
+
 			describe( "viteCriticalProductionTags()", function(){
 				it( "replaces <link rel=stylesheet> with inline + preload-swap, preserves modulepreload + script", function(){
 					var html = r.viteCriticalProductionTags(

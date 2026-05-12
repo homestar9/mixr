@@ -89,6 +89,8 @@ current request, so submodule configs just work.
 | --- | --- | --- |
 | `path( entry )` | `string` | Returns the resolved URL for one entry. |
 | `tags( entry )` | `string` | Full `<link>` / `<script>` HTML. Vite: aggregates CSS + module preloads. Manifest: a single `<script>` or `<link>` based on extension. Optionally inlines critical CSS — see below. |
+| `cssTags( entry )` | `string` | The CSS half of `tags()` — stylesheet `<link>`s (or inline `<style>` + preload-swap when critical CSS is enabled). Empty in Vite dev mode. Pair with `jsTags()` to put JS at the bottom of `<body>`. |
+| `jsTags( entry )` | `string` | The JS half of `tags()` — `<link rel="modulepreload">` + entry `<script type="module">` (or the dev-server script in dev). Pair with `cssTags()`. |
 | `bundle( entry )` | `struct` | `{ js, css[], preload[], criticalCss }` — for callers rendering tags by hand. |
 | `criticalCss( eventName )` | `string` | Inline critical CSS body for an event. Empty when disabled, in dev, or no file. |
 | `viteClient()` | `string` | `<script type="module" src=".../@vite/client"></script>`. Empty in prod. Deduped per request. |
@@ -235,6 +237,129 @@ Pass via `mixr().tags( entry, { … } )`:
 
 For per-request dedupe across multiple `tags()` calls, advanced render
 patterns, and the `</style>` safety check, see [`AGENTS.md`](AGENTS.md).
+
+---
+
+## Splitting CSS and JS rendering
+
+A lot of performance-minded folks render CSS in `<head>` but defer
+JavaScript to the very bottom of `<body>` so the parser isn't blocked by
+script downloads. Mixr supports the split three ways — pick whichever
+matches how much help you want from the tool.
+
+### The easy split — `cssTags()` + `jsTags()`
+
+Two fluent helpers bisect what `tags()` would emit. Drop `cssTags()` in
+`<head>` and `jsTags()` immediately before `</body>`:
+
+```cfm
+<!doctype html>
+<html>
+<head>
+    #mixr().viteClient()#
+    #mixr().cssTags( "resources/js/app.js" )#
+</head>
+<body>
+    <!-- your markup -->
+
+    #mixr().jsTags( "resources/js/app.js" )#
+</body>
+</html>
+```
+
+That's it. Same entry on both calls; Mixr handles the rest:
+
+- `cssTags()` emits stylesheet `<link>`s in the standard branch, or
+  inline `<style>` + preload-swap when critical CSS is enabled — same
+  rules as `tags()`.
+- `jsTags()` emits `<link rel="modulepreload">` per imported chunk plus
+  the entry `<script type="module">`.
+- `cssTags( entry ) & jsTags( entry )` is byte-for-byte equivalent to
+  `tags( entry )` for the same options.
+
+A few things to know:
+
+- **Critical-CSS dedupe is handled for you.** The first `cssTags()` (or
+  `tags()`) call per request emits the inline `<style>`; later calls
+  suppress it but still preload-swap the CSS link. Mixing `cssTags()`
+  with a later accidental `tags()` won't double-render the inline.
+- **Use one or the other, not both** for the same entry in the same
+  request. `cssTags + jsTags` *or* `tags`. Combining them creates
+  duplicate output.
+- **Vite dev mode** (`isHot()` true): `cssTags()` returns `""` because
+  Vite injects CSS through the entry script, and `jsTags()` emits the
+  single dev-server `<script>`. The page still works; the JS-at-bottom
+  layout means a brief FOUC in dev, which is normally fine in exchange
+  for the HMR experience.
+- **Flat-manifest users** (Mix / Elixir / custom) can either use this
+  split with separate keys (`cssTags( "/css/app.css" )` +
+  `jsTags( "/js/app.js" )`) or just keep calling `tags()` twice with
+  separate keys — which has always worked.
+
+### Doing it manually with `bundle()` and `criticalCss()`
+
+When you need full control over markup — custom attributes, async
+vs defer, integrity hashes, ESM/nomodule pairs, preconnect hints, etc. —
+reach for `bundle()` and assemble the HTML yourself:
+
+```cfm
+<cfset b = mixr().bundle( "resources/js/app.js" )>
+<cfset critical = mixr().criticalCss( markRendered: true )>
+
+<head>
+    <cfif len( critical )><style>#critical#</style></cfif>
+    <cfloop array="#b.css#" item="href">
+        <link rel="stylesheet" href="#href#" />
+    </cfloop>
+</head>
+
+<body>
+    <!-- ... -->
+
+    <cfloop array="#b.preload#" item="href">
+        <link rel="modulepreload" href="#href#" />
+    </cfloop>
+    <!-- e.g. plain script instead of type="module" -->
+    <script defer src="#b.js#"></script>
+</body>
+```
+
+Two contract notes:
+
+- `bundle()` is a pure read. It does NOT set the per-request
+  inline-rendered flag — so if you also call `tags()` later in the same
+  request, it would emit its own inline `<style>` and you'd get a
+  duplicate.
+- `criticalCss( eventName, { markRendered: true } )` returns the inline
+  body AND sets the flag (only when the result is non-empty), so a
+  later `tags()` call suppresses its inline.
+
+In Vite dev (`isHot()` true), `bundle().css`, `bundle().preload`, and
+`bundle().criticalCss` are all empty; `bundle().js` is the dev-server
+URL. Loops over the empty arrays no-op cleanly, but branch on
+`mixr().isHot()` if you want different markup in dev.
+
+### 2.x-style: just give me a URL
+
+If you already had a template that worked in 2.x and you don't want to
+change much, the legacy string form still resolves a path:
+
+```cfm
+<link rel="stylesheet" href="#mixr( '/css/app.css' )#" />
+<script src="#mixr( '/js/app.js' )#"></script>
+
+<!-- or the fluent equivalent -->
+<link rel="stylesheet" href="#mixr().path( '/css/app.css' )#" />
+<script src="#mixr().path( '/js/app.js' )#"></script>
+```
+
+Trade-off: with the flat-manifest driver this works exactly as before
+and you get full control over the tags. With the **Vite** driver,
+`path()` only returns the entry's compiled file — you lose
+imported-chunk CSS, `<link rel="modulepreload">` for shared chunks, and
+critical-CSS inlining. If you're on Vite and want the bundle to be
+correct, use `tags()` or `cssTags()` + `jsTags()` instead, or call
+`bundle()` and render the pieces yourself as shown above.
 
 ---
 

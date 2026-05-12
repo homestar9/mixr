@@ -123,6 +123,85 @@ component extends="AbstractDriver" {
 	}
 
 	/**
+	 * Render just the CSS slice of a Vite bundle: stylesheet `<link>`s in the
+	 * standard branch, or inline `<style>` + preload-swap `<link>`s when a
+	 * critical-CSS file is present for the current event. Returns "" in dev
+	 * (Vite injects CSS via the entry script).
+	 *
+	 * Concatenating `cssTags( entry, opts )` with `jsTags( entry, opts )` is
+	 * byte-equivalent to `tags( entry, opts )` in production for the same opts.
+	 *
+	 * @entry   Vite source key.
+	 * @options { includeImportedCss, criticalEvent, criticalSuppressInline,
+	 *           skipCritical, nonce, attributes }. Note: `attributes` here is
+	 *           applied to plain stylesheet `<link>` tags, NOT the entry script.
+	 */
+	string function cssTags( required string entry, struct options = {} ) {
+		// In dev, Vite injects CSS via the entry script — nothing to emit in <head>.
+		if ( isHot() ) return "";
+
+		var attrs          = arguments.options.keyExists( "attributes" ) ? arguments.options.attributes : {};
+		var includeCss     = arguments.options.keyExists( "includeImportedCss" )  ? arguments.options.includeImportedCss  : variables.settings.includeImportedCss;
+		var skipCritical   = arguments.options.keyExists( "skipCritical" ) ? !!arguments.options.skipCritical : false;
+		var suppressInline = arguments.options.keyExists( "criticalSuppressInline" ) ? !!arguments.options.criticalSuppressInline : false;
+		var criticalEvent  = arguments.options.keyExists( "criticalEvent" ) ? arguments.options.criticalEvent : "";
+		var nonce          = arguments.options.keyExists( "nonce" ) ? arguments.options.nonce : "";
+
+		var inlineCss     = skipCritical ? "" : readCriticalCss( criticalEvent );
+		var emittedInline = ( len( inlineCss ) && !suppressInline );
+
+		// renderModulePreload doesn't affect CSS output but it's part of bundle()'s
+		// cache key — match the tags() branch by always reading the same shape.
+		var b = bundle(
+			entry   = arguments.entry,
+			options = {
+				renderModulePreload: arguments.options.keyExists( "renderModulePreload" ) ? arguments.options.renderModulePreload : variables.settings.renderModulePreload,
+				includeImportedCss:  includeCss
+			}
+		);
+
+		return variables.renderer.viteCssTags(
+			inlineCss  = emittedInline ? inlineCss : "",
+			bundle     = b,
+			attributes = attrs,
+			options    = { nonce: nonce }
+		);
+	}
+
+	/**
+	 * Render just the JS slice of a Vite bundle: `<link rel="modulepreload">`
+	 * for each imported chunk followed by the entry `<script type="module">`.
+	 * In dev (hot file present), returns the single dev-server entry script.
+	 *
+	 * Concatenating `cssTags( entry, opts )` with `jsTags( entry, opts )` is
+	 * byte-equivalent to `tags( entry, opts )` in production for the same opts.
+	 *
+	 * @entry   Vite source key.
+	 * @options { renderModulePreload, includeImportedCss, attributes }.
+	 */
+	string function jsTags( required string entry, struct options = {} ) {
+		var attrs = arguments.options.keyExists( "attributes" ) ? arguments.options.attributes : {};
+
+		if ( isHot() ) {
+			return variables.renderer.viteDevTags(
+				devUrl     = devUrl(),
+				entry      = arguments.entry,
+				attributes = attrs
+			);
+		}
+
+		var renderPreload = arguments.options.keyExists( "renderModulePreload" ) ? arguments.options.renderModulePreload : variables.settings.renderModulePreload;
+		var includeCss    = arguments.options.keyExists( "includeImportedCss" )  ? arguments.options.includeImportedCss  : variables.settings.includeImportedCss;
+
+		var b = bundle(
+			entry   = arguments.entry,
+			options = { renderModulePreload: renderPreload, includeImportedCss: includeCss }
+		);
+
+		return variables.renderer.viteJsTags( bundle = b, attributes = attrs );
+	}
+
+	/**
 	 * Walk the manifest graph for an entry and collect:
 	 *   - js:          the entry's compiled file
 	 *   - css:         the entry's css plus css from any (recursively) imported chunks

@@ -122,6 +122,70 @@ component
 	}
 
 	/**
+	 * Render just the CSS half of what `tags()` would emit — stylesheet
+	 * `<link>`s in the standard branch, or inline `<style>` + preload-swap
+	 * `<link>`s when a critical-CSS file is present for the current event.
+	 * Companion to `jsTags()`. In dev mode the Vite driver returns "" (CSS
+	 * is injected via the entry script).
+	 *
+	 * Per-request dedupe: the first `cssTags()` (or `tags()`) call per
+	 * moduleName per request sets the inline-rendered flag. Later calls in
+	 * the same request still get their preload-swap link, but no duplicate
+	 * inline `<style>`.
+	 *
+	 * @entry      Logical entry path.
+	 * @moduleName Module to resolve from. Defaults to root app when omitted.
+	 * @options    Optional struct: { as, attributes, renderModulePreload,
+	 *             includeImportedCss, criticalEvent, skipCritical, nonce }.
+	 */
+	string function cssTags( required string entry, string moduleName = "", struct options = {} ) {
+		var opts = duplicate( arguments.options );
+
+		if ( !opts.keyExists( "criticalEvent" ) ) {
+			try {
+				opts.criticalEvent = controller.getRequestService().getContext().getCurrentEvent();
+			} catch ( any e ) {
+				opts.criticalEvent = "";
+			}
+		}
+
+		try {
+			var event = controller.getRequestService().getContext();
+			var flag  = "mixr:criticalInlined:" & arguments.moduleName;
+			if ( event.privateValueExists( flag ) ) {
+				opts.criticalSuppressInline = true;
+			} else {
+				event.setPrivateValue( flag, true );
+			}
+		} catch ( any e ) {
+			// outside a request — caller is responsible for not double-rendering.
+		}
+
+		return driverFor( arguments.moduleName ).cssTags( arguments.entry, opts );
+	}
+
+	/**
+	 * Render just the JS half of what `tags()` would emit —
+	 * `<link rel="modulepreload">` per imported chunk followed by the entry
+	 * `<script type="module">`. In dev mode emits the single dev-server
+	 * entry script. Companion to `cssTags()`.
+	 *
+	 * Does not interact with the critical-CSS dedupe flag.
+	 *
+	 * `cssTags( entry ) & jsTags( entry )` is byte-equivalent to `tags( entry )`
+	 * (for matching options) — split for templates that want JS at the bottom
+	 * of `<body>` and CSS in `<head>`.
+	 *
+	 * @entry      Logical entry path.
+	 * @moduleName Module to resolve from. Defaults to root app when omitted.
+	 * @options    Optional struct: { as, attributes, renderModulePreload,
+	 *             includeImportedCss }.
+	 */
+	string function jsTags( required string entry, string moduleName = "", struct options = {} ) {
+		return driverFor( arguments.moduleName ).jsTags( arguments.entry, arguments.options );
+	}
+
+	/**
 	 * Return a normalized bundle struct ({ js, css[], preload[], criticalCss })
 	 * for an entry. Use when you need to render tags yourself rather than use
 	 * tags().

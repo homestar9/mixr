@@ -302,6 +302,107 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				} );
 			} );
 
+			describe( "cssTags() + jsTags() split", function(){
+				it( "cssTags emits stylesheet links and no script in production", function(){
+					var d = buildDriver( { manifestPath : "/tests/resources/vite/manifest-with-imports.json" } );
+					var html = d.cssTags( "resources/js/app.js" );
+					expect( html ).toInclude( "<link rel=""stylesheet"" href=""/includes/build/assets/app-abc123.css""" );
+					expect( html ).notToInclude( "<script" );
+					expect( html ).notToInclude( "modulepreload" );
+				} );
+
+				it( "jsTags emits modulepreload + entry script and no CSS in production", function(){
+					var d = buildDriver( { manifestPath : "/tests/resources/vite/manifest-with-imports.json" } );
+					var html = d.jsTags( "resources/js/app.js" );
+					expect( html ).toInclude( "<link rel=""modulepreload"" href=""/includes/build/assets/vendor-def456.js""" );
+					expect( html ).toInclude( "<script type=""module"" src=""/includes/build/assets/app-abc123.js""" );
+					expect( html ).notToInclude( "rel=""stylesheet""" );
+					expect( html ).notToInclude( "<style" );
+				} );
+
+				it( "cssTags + jsTags is byte-equivalent to tags() with no critical CSS", function(){
+					var d = buildDriver( { manifestPath : "/tests/resources/vite/manifest-with-imports.json" } );
+					var combined = d.cssTags( "resources/js/app.js" ) & d.jsTags( "resources/js/app.js" );
+					expect( combined ).toBe( d.tags( "resources/js/app.js" ) );
+				} );
+
+				it( "cssTags emits inline <style> + preload-swap when critical CSS is enabled and file exists", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var html = d.cssTags( "resources/js/app.js", { criticalEvent: "main.index" } );
+					expect( html ).toInclude( "<style>" );
+					expect( html ).toInclude( ".hero{color:##222" );
+					expect( html ).toInclude( "rel=""preload""" );
+					expect( html ).toInclude( "as=""style""" );
+					// no JS in CSS slice
+					expect( html ).notToInclude( "<script" );
+					expect( html ).notToInclude( "modulepreload" );
+				} );
+
+				it( "cssTags + jsTags is byte-equivalent to tags() with critical CSS enabled + file present", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var combined = d.cssTags( "resources/js/app.js", { criticalEvent: "main.index" } )
+						& d.jsTags( "resources/js/app.js", { criticalEvent: "main.index" } );
+					expect( combined ).toBe( d.tags( "resources/js/app.js", { criticalEvent: "main.index" } ) );
+				} );
+
+				it( "cssTags + jsTags is byte-equivalent to tags() when critical enabled but file missing", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var combined = d.cssTags( "resources/js/app.js", { criticalEvent: "missing.event" } )
+						& d.jsTags( "resources/js/app.js", { criticalEvent: "missing.event" } );
+					expect( combined ).toBe( d.tags( "resources/js/app.js", { criticalEvent: "missing.event" } ) );
+				} );
+
+				it( "cssTags returns '' in dev mode (Vite injects CSS via the entry script)", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						hotFilePath  : "/tests/resources/vite/hot",
+						devMode      : true
+					} );
+					expect( d.isHot() ).toBeTrue();
+					expect( d.cssTags( "resources/js/app.js" ) ).toBe( "" );
+				} );
+
+				it( "jsTags returns the dev-server script in dev mode", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						hotFilePath  : "/tests/resources/vite/hot",
+						devMode      : true
+					} );
+					var html = d.jsTags( "resources/js/app.js" );
+					expect( html ).toInclude( "src=""http://127.0.0.1:5173/resources/js/app.js""" );
+					expect( html ).notToInclude( "<link rel" );
+				} );
+
+				it( "cssTags suppresses the inline <style> when criticalSuppressInline=true (preload-swap still emitted)", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
+						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var html = d.cssTags( "resources/js/app.js", {
+						criticalEvent          : "main.index",
+						criticalSuppressInline : true
+					} );
+					expect( html ).notToInclude( "<style>" );
+					expect( html ).toInclude( "rel=""preload""" );
+					expect( html ).toInclude( "as=""style""" );
+				} );
+
+				it( "jsTags applies extra attributes to the entry script", function(){
+					var d = buildDriver( { manifestPath : "/tests/resources/vite/manifest-with-imports.json" } );
+					var html = d.jsTags( "resources/js/app.js", { attributes: { defer: true } } );
+					expect( html ).toInclude( "defer" );
+				} );
+			} );
+
 			describe( "criticalCss(options) driver method", function(){
 				it( "returns the inline body for the resolved event when enabled", function(){
 					var d = buildDriver( {

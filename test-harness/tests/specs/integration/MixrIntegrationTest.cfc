@@ -219,6 +219,79 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				} );
 			} );
 
+			describe( "cssTags() + jsTags() head/body split (vite submodule)", function(){
+				beforeEach( function( currentSpec ){
+					var event = getRequestContext();
+					event.removePrivateValue( "mixr:criticalInlined:vite" );
+				} );
+
+				it( "cssTags emits CSS only; jsTags emits JS only", function(){
+					var head = mixr.cssTags( entry = "resources/js/app.js", moduleName = "vite" );
+					var body = mixr.jsTags( entry = "resources/js/app.js", moduleName = "vite" );
+
+					expect( head ).toInclude( "<link rel=""stylesheet""" );
+					expect( head ).toInclude( "app-PROD123.css" );
+					expect( head ).notToInclude( "<script" );
+					expect( head ).notToInclude( "modulepreload" );
+
+					expect( body ).toInclude( "<script type=""module""" );
+					expect( body ).toInclude( "modulepreload" );
+					expect( body ).notToInclude( "rel=""stylesheet""" );
+				} );
+
+				it( "cssTags + jsTags equals tags() byte-for-byte (no critical CSS option)", function(){
+					var combined = mixr.cssTags( entry = "resources/js/app.js", moduleName = "vite", options = { skipCritical: true } )
+						& mixr.jsTags( entry = "resources/js/app.js", moduleName = "vite", options = { skipCritical: true } );
+					var combo = mixr.tags( entry = "resources/js/app.js", moduleName = "vite", options = { skipCritical: true } );
+					expect( combined ).toBe( combo );
+				} );
+
+				it( "cssTags participates in per-request dedupe: cssTags then tags() emits no second inline <style>", function(){
+					var head = mixr.cssTags(
+						entry      = "resources/js/app.js",
+						moduleName = "vite",
+						options    = { criticalEvent: "main.index" }
+					);
+					expect( head ).toInclude( "<style>" );
+
+					var laterTags = mixr.tags(
+						entry      = "resources/js/app.js",
+						moduleName = "vite",
+						options    = { criticalEvent: "main.index" }
+					);
+					expect( laterTags ).notToInclude( "<style>" );
+					// preload-swap link should still be there
+					expect( laterTags ).toInclude( "rel=""preload""" );
+				} );
+
+				it( "jsTags does not touch the critical-CSS dedupe flag", function(){
+					var event = getRequestContext();
+					event.removePrivateValue( "mixr:criticalInlined:vite" );
+
+					mixr.jsTags(
+						entry      = "resources/js/app.js",
+						moduleName = "vite",
+						options    = { criticalEvent: "main.index" }
+					);
+					expect( event.privateValueExists( "mixr:criticalInlined:vite" ) ).toBeFalse();
+				} );
+
+				it( "fluent scope: mixr.forModule('vite').cssTags / jsTags work the same as facade calls", function(){
+					var event = getRequestContext();
+					event.removePrivateValue( "mixr:criticalInlined:vite" );
+
+					var scope = mixr.forModule( "vite" );
+					expect( scope.cssTags( "resources/js/app.js", { skipCritical: true } ) ).toInclude( "rel=""stylesheet""" );
+					expect( scope.jsTags( "resources/js/app.js" ) ).toInclude( "<script type=""module""" );
+				} );
+
+				it( "in dev (viteSpa) cssTags returns '' and jsTags returns the dev-server script", function(){
+					expect( mixr.cssTags( entry = "resources/js/app.js", moduleName = "viteSpa" ) ).toBe( "" );
+					expect( mixr.jsTags( entry = "resources/js/app.js", moduleName = "viteSpa" ) )
+						.toInclude( "http://127.0.0.1:5173/resources/js/app.js" );
+				} );
+			} );
+
 			describe( "global mixr() helper", function(){
 				it( "legacy string form resolves an asset for the current module", function(){
 					var e = execute( event = "main.mixrCurrent", renderResults = false );

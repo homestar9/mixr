@@ -122,6 +122,74 @@ component extends="AbstractDriver" {
 	}
 
 	/**
+	 * Render just the CSS slice for a single manifest asset. Emits the same
+	 * critical-CSS branch as `tags()` when the entry is a CSS asset; returns
+	 * "" for a JS asset (it has nothing CSS-shaped to emit).
+	 *
+	 * `cssTags( entry, opts ) & jsTags( entry, opts )` is byte-equivalent to
+	 * `tags( entry, opts )` for the same opts.
+	 *
+	 * @entry   Manifest source key.
+	 * @options { as, attributes, criticalEvent, criticalSuppressInline,
+	 *           skipCritical, nonce }.
+	 */
+	string function cssTags( required string entry, struct options = {} ) {
+		var as    = arguments.options.keyExists( "as" )         ? arguments.options.as         : "auto";
+		var attrs = arguments.options.keyExists( "attributes" ) ? arguments.options.attributes : {};
+		var skipCritical   = arguments.options.keyExists( "skipCritical" ) ? !!arguments.options.skipCritical : false;
+		var suppressInline = arguments.options.keyExists( "criticalSuppressInline" ) ? !!arguments.options.criticalSuppressInline : false;
+		var criticalEvent  = arguments.options.keyExists( "criticalEvent" ) ? arguments.options.criticalEvent : "";
+		var nonce          = arguments.options.keyExists( "nonce" ) ? arguments.options.nonce : "";
+
+		var href = path( arguments.entry );
+		var kind = ( as == "auto" ) ? ( reFindNoCase( "\.css(\?|##|$)", href ) ? "css" : "js" ) : as;
+
+		var inlineCss     = skipCritical ? "" : readCriticalCss( criticalEvent );
+		var emittedInline = ( len( inlineCss ) && !suppressInline );
+
+		if ( kind == "css" ) {
+			if ( len( inlineCss ) ) {
+				return variables.renderer.criticalCssTags(
+					inlineCss  = emittedInline ? inlineCss : "",
+					hrefs      = [ href ],
+					attributes = attrs,
+					options    = { nonce: nonce }
+				);
+			}
+			return variables.renderer.manifestTag( href = href, as = "css", attributes = attrs );
+		}
+
+		// JS asset: CSS slice carries only the route-keyed inline critical CSS
+		// (matching the JS-asset branch in tags()), or "" when none/suppressed.
+		if ( emittedInline ) {
+			return variables.renderer.criticalCssTags(
+				inlineCss  = inlineCss,
+				hrefs      = [],
+				options    = { nonce: nonce }
+			);
+		}
+		return "";
+	}
+
+	/**
+	 * Render just the JS slice for a single manifest asset. Emits the
+	 * `<script>` when the entry is a JS asset; returns "" for a CSS asset.
+	 *
+	 * @entry   Manifest source key.
+	 * @options { as, attributes }.
+	 */
+	string function jsTags( required string entry, struct options = {} ) {
+		var as    = arguments.options.keyExists( "as" )         ? arguments.options.as         : "auto";
+		var attrs = arguments.options.keyExists( "attributes" ) ? arguments.options.attributes : {};
+
+		var href = path( arguments.entry );
+		var kind = ( as == "auto" ) ? ( reFindNoCase( "\.css(\?|##|$)", href ) ? "css" : "js" ) : as;
+		if ( kind != "js" ) return "";
+
+		return variables.renderer.manifestTag( href = href, as = "js", attributes = attrs );
+	}
+
+	/**
 	 * Return a normalized bundle struct. The flat-manifest driver has no
 	 * concept of imported chunks, so css and preload are always empty.
 	 *

@@ -200,6 +200,76 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				} );
 			} );
 
+			describe( "cssTags() + jsTags() split", function(){
+				it( "cssTags emits a stylesheet <link> for a .css asset and '' for a .js asset", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : ""
+					} );
+					expect( d.cssTags( "/css/app.css" ) ).toInclude( "<link rel=""stylesheet""" );
+					expect( d.cssTags( "/css/app.css" ) ).toInclude( "href=""/css/app.css" );
+					expect( d.cssTags( "/tests/asset.js" ) ).toBe( "" );
+				} );
+
+				it( "jsTags emits a <script> for a .js asset and '' for a .css asset", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : ""
+					} );
+					expect( d.jsTags( "/tests/asset.js" ) ).toInclude( "<script src=""/tests/asset.js" );
+					expect( d.jsTags( "/css/app.css" ) ).toBe( "" );
+				} );
+
+				it( "cssTags + jsTags equals tags() for the same asset (CSS asset)", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : ""
+					} );
+					var combined = d.cssTags( "/css/app.css" ) & d.jsTags( "/css/app.css" );
+					expect( combined ).toBe( d.tags( "/css/app.css" ) );
+				} );
+
+				it( "cssTags + jsTags equals tags() for the same asset (JS asset)", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : ""
+					} );
+					var combined = d.cssTags( "/tests/asset.js" ) & d.jsTags( "/tests/asset.js" );
+					expect( combined ).toBe( d.tags( "/tests/asset.js" ) );
+				} );
+
+				it( "cssTags + jsTags equals tags() for a CSS asset with critical CSS enabled", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : "",
+						criticalCss       : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					var combined = d.cssTags( "/css/app.css", { criticalEvent: "main.index" } )
+						& d.jsTags( "/css/app.css", { criticalEvent: "main.index" } );
+					expect( combined ).toBe( d.tags( "/css/app.css", { criticalEvent: "main.index" } ) );
+				} );
+
+				it( "cssTags + jsTags equals tags() for a JS asset with critical CSS enabled (inline goes into cssTags)", function(){
+					var d = buildDriver( {
+						manifestPath      : "/tests/resources/mix-manifest.json",
+						prependModuleRoot : false,
+						prependPath       : "",
+						criticalCss       : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
+					} );
+					// Critical inline body belongs in the head slot (cssTags); the script belongs in the body slot (jsTags).
+					var head = d.cssTags( "/tests/asset.js", { criticalEvent: "main.index" } );
+					var body = d.jsTags( "/tests/asset.js", { criticalEvent: "main.index" } );
+					expect( head ).toInclude( "<style>" );
+					expect( body ).toInclude( "<script src=""/tests/asset.js" );
+					expect( head & body ).toBe( d.tags( "/tests/asset.js", { criticalEvent: "main.index" } ) );
+				} );
+			} );
+
 			describe( "criticalCss(options) driver method", function(){
 				it( "returns the inline body for the resolved event when enabled", function(){
 					var d = buildDriver( {

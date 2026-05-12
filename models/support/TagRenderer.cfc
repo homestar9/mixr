@@ -126,6 +126,66 @@ component singleton {
 	}
 
 	/**
+	 * Render just the CSS slice of a Vite bundle: inline `<style>` (when
+	 * `inlineCss` is non-empty) + preload-swap `<link>`s for each CSS href,
+	 * OR a plain `<link rel="stylesheet">` per href when `inlineCss` is empty.
+	 *
+	 * Composes with `viteJsTags()` so callers splitting head/body get the
+	 * same bytes as `viteProductionTags()` / `viteCriticalProductionTags()`
+	 * combined. Returns "" when both `inlineCss` and `bundle.css` are empty.
+	 *
+	 * @inlineCss  Raw critical CSS body. Empty string emits plain stylesheet links.
+	 * @bundle     Normalized bundle struct as produced by ViteDriver.bundle().
+	 * @attributes Extra HTML attributes for plain `<link rel="stylesheet">` (escaped).
+	 * @options    { nonce, fetchpriority }.
+	 */
+	string function viteCssTags( required string inlineCss, required struct bundle, struct attributes = {}, struct options = {} ) {
+		var nonce         = arguments.options.keyExists( "nonce" )         ? arguments.options.nonce         : "";
+		var fetchpriority = arguments.options.keyExists( "fetchpriority" ) ? arguments.options.fetchpriority : true;
+
+		var out = createObject( "java", "java.lang.StringBuilder" ).init();
+
+		if ( len( arguments.inlineCss ) ) {
+			out.append( inlineStyleTag( arguments.inlineCss, nonce ) );
+			for ( var href in arguments.bundle.css ) {
+				out.append( preloadSwapTag( href, nonce, fetchpriority, {} ) );
+			}
+		} else {
+			for ( var href in arguments.bundle.css ) {
+				out.append( linkTag( href = href, rel = "stylesheet", extraAttrs = arguments.attributes ) );
+			}
+		}
+
+		return out.toString();
+	}
+
+	/**
+	 * Render just the JS slice of a Vite bundle: `<link rel="modulepreload">`
+	 * for each imported chunk, followed by the entry `<script type="module">`.
+	 *
+	 * Composes with `viteCssTags()` so the concatenation matches the bytes
+	 * of `viteProductionTags()` (or `viteCriticalProductionTags()` when the
+	 * critical branch is also active).
+	 *
+	 * @bundle     Normalized bundle struct as produced by ViteDriver.bundle().
+	 * @attributes Extra HTML attributes for the entry `<script>` (escaped).
+	 */
+	string function viteJsTags( required struct bundle, struct attributes = {} ) {
+		var out = createObject( "java", "java.lang.StringBuilder" ).init();
+
+		for ( var href in arguments.bundle.preload ) {
+			out.append( linkTag( href = href, rel = "modulepreload" ) );
+		}
+		out.append( scriptTag(
+			src        = arguments.bundle.js,
+			type       = "module",
+			extraAttrs = arguments.attributes
+		) );
+
+		return out.toString();
+	}
+
+	/**
 	 * Render a Vite production tag set with critical-CSS handling: an inline
 	 * `<style>` (when `inlineCss` is non-empty) replaces the standard CSS
 	 * `<link rel="stylesheet">` block; full-CSS hrefs are async-loaded via

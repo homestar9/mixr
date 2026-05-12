@@ -50,6 +50,40 @@ component {
 	}
 
 	/**
+	 * Render just the CSS half of what `tags()` would emit for the bound
+	 * module — stylesheet links (or inline `<style>` + preload-swap when
+	 * critical CSS is enabled). Companion to `jsTags()`. Empty in Vite dev.
+	 *
+	 * @entry   Logical entry path.
+	 * @options Optional struct: { as, attributes, renderModulePreload,
+	 *          includeImportedCss, criticalEvent, skipCritical, nonce }.
+	 */
+	string function cssTags( required string entry, struct options = {} ){
+		return variables.service.cssTags(
+			entry      = arguments.entry,
+			moduleName = variables.moduleName,
+			options    = arguments.options
+		);
+	}
+
+	/**
+	 * Render just the JS half of what `tags()` would emit for the bound
+	 * module — modulepreload links + entry script (or the dev-server script
+	 * in dev). Companion to `cssTags()`.
+	 *
+	 * @entry   Logical entry path.
+	 * @options Optional struct: { as, attributes, renderModulePreload,
+	 *          includeImportedCss }.
+	 */
+	string function jsTags( required string entry, struct options = {} ){
+		return variables.service.jsTags(
+			entry      = arguments.entry,
+			moduleName = variables.moduleName,
+			options    = arguments.options
+		);
+	}
+
+	/**
 	 * Render <script type="module" src=".../@vite/client"></script> for the
 	 * bound module. Empty string in production. Deduped per request.
 	 */
