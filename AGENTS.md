@@ -238,3 +238,7 @@ The default working branch follows GitFlow (`develop` integration, `master` rele
 ## Code Formatting
 
 Do not run `run-script format` or `cfformat` on the codebase. I will run manually.
+
+## Documentation
+
+The documentation is located in the root README.md file. It is written in Markdown and should be updated whenever there are notable changes to the codebase, functionality, patterns, or when important information is identified that should be documented for future maintainers. The file should be written in plain english and should be optimized for developers who are new to the codebase. Avoid too much technical jargon and try to explain concepts in a simple way. Use examples and code snippets to illustrate points when necessary. The documentation should be clear, concise, and easy to understand. Avoid using em-dashes (—) in the documentation unless absolutely necessary for clarity, as they can be difficult to read in plain text form. Use regular dashes (-) instead for better readability.
