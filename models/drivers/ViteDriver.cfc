@@ -164,7 +164,7 @@ component extends="AbstractDriver" {
 			inlineCss  = emittedInline ? inlineCss : "",
 			bundle     = b,
 			attributes = attrs,
-			options    = { nonce: nonce }
+			options    = { nonce: nonce, criticalMode: len( inlineCss ) > 0 }
 		);
 	}
 
@@ -256,11 +256,27 @@ component extends="AbstractDriver" {
 				walkPreload( node, manifest, preloadBag );
 			}
 
-			variables._bundles[ cacheKey ] = {
-				js: joinPath( variables.settings.buildPath, node.file ),
-				css: cssBag.out.map( ( f ) => joinPath( variables.settings.buildPath, f ) ),
-				preload: preloadBag.out.map( ( f ) => joinPath( variables.settings.buildPath, f ) )
-			};
+			var entryFile = joinPath( variables.settings.buildPath, node.file );
+			var cssList = cssBag.out.map( ( f ) => joinPath( variables.settings.buildPath, f ) );
+			var preloadList = preloadBag.out.map( ( f ) => joinPath( variables.settings.buildPath, f ) );
+
+			// CSS-only entry: the manifest's `file` IS the compiled stylesheet,
+			// not a script. Route it into css[] (prepended so it renders as the
+			// primary <link>) and leave js empty so renderers skip the <script>.
+			if ( reFindNoCase( "\.css$", node.file ) ) {
+				cssList.prepend( entryFile );
+				variables._bundles[ cacheKey ] = {
+					js: "",
+					css: cssList,
+					preload: preloadList
+				};
+			} else {
+				variables._bundles[ cacheKey ] = {
+					js: entryFile,
+					css: cssList,
+					preload: preloadList
+				};
+			}
 		}
 
 		var cached = variables._bundles[ cacheKey ];

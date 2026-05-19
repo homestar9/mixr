@@ -83,7 +83,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					event.removePrivateValue( "mixr:criticalInlined:vite" );
 				} );
 
-				it( "inlines <style> + emits preload-swap + <noscript> when fixture file exists for the event", function(){
+				it( "inlines #encodeForHtml( "<style>" )# + emits preload-swap + #encodeForHtml( "<noscript>" )# when fixture file exists for the event", function(){
 					var html = mixr.tags(
 						entry      = "resources/js/app.js",
 						moduleName = "vite",
@@ -122,7 +122,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).toInclude( "<link rel=""stylesheet""" );
 				} );
 
-				it( "per-request dedupe: a second tags() call in the same request emits no inline <style>", function(){
+				it( "per-request dedupe: a second tags() call in the same request emits no inline #encodeForHtml( "<style>" )#", function(){
 					var first = mixr.tags(
 						entry      = "resources/js/app.js",
 						moduleName = "vite",
@@ -246,7 +246,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( combined ).toBe( combo );
 				} );
 
-				it( "cssTags participates in per-request dedupe: cssTags then tags() emits no second inline <style>", function(){
+				it( "cssTags participates in per-request dedupe: cssTags then tags() emits no second inline #encodeForHtml( "<style>" )#", function(){
 					var head = mixr.cssTags(
 						entry      = "resources/js/app.js",
 						moduleName = "vite",
@@ -313,7 +313,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( e.getPrivateValue( "mixrOtherFluent" ) ).toInclude( "/includes/build/assets/app-PROD123.js" );
 				} );
 
-				it( "fluent tags() with critical-CSS options inlines <style> and preload-swaps the CSS link", function(){
+				it( "fluent tags() with critical-CSS options inlines #encodeForHtml( "<style>" )# and preload-swaps the CSS link", function(){
 					var e    = execute( event = "main.mixrCssWithCritical", renderResults = false );
 					var crit = e.getPrivateValue( "mixrCssWithCritical" );
 					expect( crit ).toInclude( "<style>" );

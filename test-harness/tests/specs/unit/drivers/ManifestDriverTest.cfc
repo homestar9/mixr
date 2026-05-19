@@ -99,7 +99,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 			} );
 
 			describe( "critical CSS", function(){
-				it( "for a CSS asset: emits inline <style> + preload-swap when enabled and file exists", function(){
+				it( "for a CSS asset: emits inline #encodeForHtml( "<style>" )# + preload-swap when enabled and file exists", function(){
 					var d = buildDriver( {
 						manifestPath      : "/tests/resources/mix-manifest.json",
 						prependModuleRoot : false,
@@ -115,7 +115,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 						.toBe( arrayLen( reMatch( "<noscript><link rel=""stylesheet""", html ) ) );
 				} );
 
-				it( "for a JS asset: emits inline <style> (route-keyed) + standard <script>", function(){
+				it( "for a JS asset: emits inline #encodeForHtml( "<style>" )# (route-keyed) + standard #encodeForHtml( "<script>" )#", function(){
 					var d = buildDriver( {
 						manifestPath      : "/tests/resources/mix-manifest.json",
 						prependModuleRoot : false,
@@ -188,7 +188,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( b.criticalCss ).toBe( "" );
 				} );
 
-				it( "throws MalformedCriticalCss when fixture contains </style>", function(){
+				it( "throws MalformedCriticalCss when fixture contains #encodeForHtml( "</style>" )#", function(){
 					var d = buildDriver( {
 						manifestPath      : "/tests/resources/mix-manifest.json",
 						prependModuleRoot : false,
@@ -201,7 +201,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 			} );
 
 			describe( "cssTags() + jsTags() split", function(){
-				it( "cssTags emits a stylesheet <link> for a .css asset and '' for a .js asset", function(){
+				it( "cssTags emits a stylesheet #encodeForHtml( "<link>" )# for a .css asset and '' for a .js asset", function(){
 					var d = buildDriver( {
 						manifestPath      : "/tests/resources/mix-manifest.json",
 						prependModuleRoot : false,
@@ -212,7 +212,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( d.cssTags( "/tests/asset.js" ) ).toBe( "" );
 				} );
 
-				it( "jsTags emits a <script> for a .js asset and '' for a .css asset", function(){
+				it( "jsTags emits a #encodeForHtml( "<script>" )# for a .js asset and '' for a .css asset", function(){
 					var d = buildDriver( {
 						manifestPath      : "/tests/resources/mix-manifest.json",
 						prependModuleRoot : false,

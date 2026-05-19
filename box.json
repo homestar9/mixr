@@ -25,12 +25,9 @@
 	"devDependencies" 	:{
 		"commandbox-cfformat":"*",
 		"commandbox-dotenv":"*",
-        "commandbox-cfconfig":"*",
-        "testbox":"^4.5.0+5"
+        "commandbox-cfconfig":"*"
 	},
-    "installPaths":{
-        "testbox":"testbox/"
-    },
+    "installPaths":{},
 	"ignore":[
         "**/.*",
         "test-harness",

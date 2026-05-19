@@ -133,7 +133,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 			} );
 
 			describe( "critical CSS", function(){
-				it( "emits inline <style> + preload-swap when enabled and a fixture file exists for the event", function(){
+				it( "emits inline #encodeForHtml( "<style>" )# + preload-swap when enabled and a fixture file exists for the event", function(){
 					var d = buildDriver( {
 						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
 						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
@@ -195,7 +195,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).toInclude( "src=""http://127.0.0.1:5173/resources/js/app.js""" );
 				} );
 
-				it( "throws MalformedCriticalCss when critical file contains </style>", function(){
+				it( "throws MalformedCriticalCss when critical file contains #encodeForHtml( "</style>" )#", function(){
 					var d = buildDriver( {
 						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
 						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
@@ -204,7 +204,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 						.toThrow( type = "MalformedCriticalCss" );
 				} );
 
-				it( "criticalSuppressInline=true emits preload-swap CSS without the <style> block", function(){
+				it( "criticalSuppressInline=true emits preload-swap CSS without the #encodeForHtml( "<style>" )# block", function(){
 					var d = buildDriver( {
 						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
 						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
@@ -279,7 +279,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( b.criticalCss ).toBe( "" );
 				} );
 
-				it( "throws MalformedCriticalCss when fixture contains </style>", function(){
+				it( "throws MalformedCriticalCss when fixture contains #encodeForHtml( "</style>" )#", function(){
 					var d = buildDriver( {
 						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
 						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
@@ -326,7 +326,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( combined ).toBe( d.tags( "resources/js/app.js" ) );
 				} );
 
-				it( "cssTags emits inline <style> + preload-swap when critical CSS is enabled and file exists", function(){
+				it( "cssTags emits inline #encodeForHtml( "<style>" )# + preload-swap when critical CSS is enabled and file exists", function(){
 					var d = buildDriver( {
 						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
 						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }
@@ -382,7 +382,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).notToInclude( "<link rel" );
 				} );
 
-				it( "cssTags suppresses the inline <style> when criticalSuppressInline=true (preload-swap still emitted)", function(){
+				it( "cssTags suppresses the inline #encodeForHtml( "<style>" )# when criticalSuppressInline=true (preload-swap still emitted)", function(){
 					var d = buildDriver( {
 						manifestPath : "/tests/resources/vite/manifest-with-imports.json",
 						criticalCss  : { enabled: true, path: "/tests/resources/critical", suffix: ".critical.css" }

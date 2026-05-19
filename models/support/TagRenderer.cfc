@@ -36,11 +36,13 @@ component singleton {
 		for ( var href in arguments.bundle.preload ) {
 			out.append( linkTag( href = href, rel = "modulepreload" ) );
 		}
-		out.append( scriptTag(
-			src = arguments.bundle.js,
-			type = "module",
-			extraAttrs = arguments.attributes
-		) );
+		if ( len( arguments.bundle.js ) ) {
+			out.append( scriptTag(
+				src = arguments.bundle.js,
+				type = "module",
+				extraAttrs = arguments.attributes
+			) );
+		}
 
 		return out.toString();
 	}
@@ -134,19 +136,26 @@ component singleton {
 	 * same bytes as `viteProductionTags()` / `viteCriticalProductionTags()`
 	 * combined. Returns "" when both `inlineCss` and `bundle.css` are empty.
 	 *
-	 * @inlineCss  Raw critical CSS body. Empty string emits plain stylesheet links.
+	 * @inlineCss  Raw critical CSS body. Empty string suppresses the <style>.
 	 * @bundle     Normalized bundle struct as produced by ViteDriver.bundle().
 	 * @attributes Extra HTML attributes for plain `<link rel="stylesheet">` (escaped).
-	 * @options    { nonce, fetchpriority }.
+	 * @options    { nonce, fetchpriority, criticalMode }. When `criticalMode` is
+	 *             true the CSS hrefs are async-loaded via preload-swap even if
+	 *             `inlineCss` is empty (the caller has suppressed the inline body
+	 *             but still wants the critical-CSS render path). Defaults to
+	 *             `len(inlineCss) > 0` for backward compatibility.
 	 */
 	string function viteCssTags( required string inlineCss, required struct bundle, struct attributes = {}, struct options = {} ) {
 		var nonce         = arguments.options.keyExists( "nonce" )         ? arguments.options.nonce         : "";
 		var fetchpriority = arguments.options.keyExists( "fetchpriority" ) ? arguments.options.fetchpriority : true;
+		var criticalMode  = arguments.options.keyExists( "criticalMode" )  ? !!arguments.options.criticalMode : len( arguments.inlineCss ) > 0;
 
 		var out = createObject( "java", "java.lang.StringBuilder" ).init();
 
-		if ( len( arguments.inlineCss ) ) {
-			out.append( inlineStyleTag( arguments.inlineCss, nonce ) );
+		if ( criticalMode ) {
+			if ( len( arguments.inlineCss ) ) {
+				out.append( inlineStyleTag( arguments.inlineCss, nonce ) );
+			}
 			for ( var href in arguments.bundle.css ) {
 				out.append( preloadSwapTag( href, nonce, fetchpriority, {} ) );
 			}
@@ -176,11 +185,13 @@ component singleton {
 		for ( var href in arguments.bundle.preload ) {
 			out.append( linkTag( href = href, rel = "modulepreload" ) );
 		}
-		out.append( scriptTag(
-			src        = arguments.bundle.js,
-			type       = "module",
-			extraAttrs = arguments.attributes
-		) );
+		if ( len( arguments.bundle.js ) ) {
+			out.append( scriptTag(
+				src        = arguments.bundle.js,
+				type       = "module",
+				extraAttrs = arguments.attributes
+			) );
+		}
 
 		return out.toString();
 	}
@@ -215,11 +226,13 @@ component singleton {
 		for ( var href in arguments.bundle.preload ) {
 			out.append( linkTag( href = href, rel = "modulepreload" ) );
 		}
-		out.append( scriptTag(
-			src        = arguments.bundle.js,
-			type       = "module",
-			extraAttrs = arguments.attributes
-		) );
+		if ( len( arguments.bundle.js ) ) {
+			out.append( scriptTag(
+				src        = arguments.bundle.js,
+				type       = "module",
+				extraAttrs = arguments.attributes
+			) );
+		}
 
 		return out.toString();
 	}

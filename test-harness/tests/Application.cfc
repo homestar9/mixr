@@ -19,6 +19,7 @@ component{
 	// Turn on/off white space management
 	this.whiteSpaceManagement = "smart";
     this.enableNullSupport = shouldEnableFullNullSupport();
+    this.enableRobustException = true;
 
 	// Create testing mapping
 	this.mappings[ "/tests" ] = getDirectoryFromPath( getCurrentTemplatePath() );
@@ -31,23 +32,6 @@ component{
 	moduleRootPath = REReplaceNoCase( rootPath, "#request.MODULE_PATH#(\\|/)test-harness(\\|/)", "" );
 	this.mappings[ "/moduleroot" ] 				= moduleRootPath;
 	this.mappings[ "/#request.MODULE_NAME#" ] 	= moduleRootPath & "#request.MODULE_PATH#";
-
-	// ORM Definitions
-	/**
-	this.datasource = "coolblog";
-	this.ormEnabled = "true";
-	this.ormSettings = {
-		cfclocation = [ "/root/models" ],
-		logSQL = true,
-		dbcreate = "update",
-		secondarycacheenabled = false,
-		cacheProvider = "ehcache",
-		flushAtRequestEnd = false,
-		eventhandling = true,
-		eventHandler = "cborm.models.EventHandler",
-		skipcfcWithError = false
-	};
-	**/
 
 	function onRequestStart( required targetPage ){
 
@@ -74,7 +58,9 @@ component{
 	}
 
 	public void function onRequestEnd( required targetPage ) {
-		request.coldBoxVirtualApp.shutdown();
+		if ( request.keyExists( "coldBoxVirtualApp" ) ) {
+            request.coldBoxVirtualApp.shutdown();
+        }
 	}
 
     private boolean function shouldEnableFullNullSupport() {

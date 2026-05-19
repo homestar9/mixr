@@ -50,7 +50,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 			} );
 
 			describe( "criticalCssTags()", function(){
-				it( "emits inline <style> + preload-swap + <noscript> with fetchpriority=high by default", function(){
+				it( "emits inline #encodeForHtml( "<style>" )# + preload-swap + #encodeForHtml( "<noscript>" )# with fetchpriority=high by default", function(){
 					var html = r.criticalCssTags(
 						inlineCss = ".a{color:red}",
 						hrefs     = [ "/build/app.css" ]
@@ -64,7 +64,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).toInclude( "<noscript><link rel=""stylesheet"" href=""/build/app.css"" /></noscript>" );
 				} );
 
-				it( "applies CSP nonce to both <style> and preload <link>", function(){
+				it( "applies CSP nonce to both #encodeForHtml( "<style>" )# and preload #encodeForHtml( "<link>" )#", function(){
 					var html = r.criticalCssTags(
 						inlineCss = ".a{}",
 						hrefs     = [ "/build/app.css" ],
@@ -84,7 +84,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).notToInclude( "fetchpriority" );
 				} );
 
-				it( "suppresses inline <style> when inlineCss is empty (still emits preload-swap)", function(){
+				it( "suppresses inline #encodeForHtml( "<style>" )# when inlineCss is empty (still emits preload-swap)", function(){
 					var html = r.criticalCssTags(
 						inlineCss = "",
 						hrefs     = [ "/build/app.css" ]
@@ -102,7 +102,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).toInclude( "/b.css" );
 				} );
 
-				it( "emits only the inline <style> when hrefs is empty", function(){
+				it( "emits only the inline #encodeForHtml( "<style>" )# when hrefs is empty", function(){
 					var html = r.criticalCssTags(
 						inlineCss = ".x{}",
 						hrefs     = []
@@ -113,7 +113,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 			} );
 
 			describe( "viteCssTags() + viteJsTags() split", function(){
-				it( "emits plain <link rel=stylesheet> tags when inlineCss is empty", function(){
+				it( "emits plain #encodeForHtml( "<link rel=stylesheet>" )# tags when inlineCss is empty", function(){
 					var html = r.viteCssTags(
 						inlineCss = "",
 						bundle    = {
@@ -128,7 +128,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).notToInclude( "modulepreload" );
 				} );
 
-				it( "emits inline <style> + preload-swap when inlineCss is non-empty", function(){
+				it( "emits inline #encodeForHtml( "<style>" )# + preload-swap when inlineCss is non-empty", function(){
 					var html = r.viteCssTags(
 						inlineCss = ".a{}",
 						bundle    = {
@@ -200,7 +200,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 			} );
 
 			describe( "viteCriticalProductionTags()", function(){
-				it( "replaces <link rel=stylesheet> with inline + preload-swap, preserves modulepreload + script", function(){
+				it( "replaces #encodeForHtml( "<link rel=stylesheet>" )# with inline + preload-swap, preserves modulepreload + script", function(){
 					var html = r.viteCriticalProductionTags(
 						inlineCss = ".a{}",
 						bundle    = {
