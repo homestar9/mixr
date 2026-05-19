@@ -36,7 +36,13 @@ moduleSettings = {
         manifestPath : "/includes/build/.vite/manifest.json",
         buildPath    : "/includes/build", 
         hotFilePath  : "/includes/hot",
-        devMode      : getSystemSetting( "ENVIRONMENT", "production" ) eq "development"
+        devMode      : getSystemSetting( "ENVIRONMENT", "production" ) eq "development",
+        // using rollup-plugin-critical for critical CSS inlining? 
+        // Enable it and set the suffix to match your plugin's output:
+        criticalCss         : {
+            enabled         : true,
+            suffix          : "_critical.min.css"
+        }
     }
 };
 ```
