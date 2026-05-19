@@ -395,7 +395,7 @@ component
 	 * to submodules. Settings resolve via a single chain (lowest to highest
 	 * priority):
 	 *
-	 *   1. **System defaults** — declared in mixr's ModuleConfig.cfc.
+	 *   1. **System defaults** — declared in `systemDefaults()` below.
 	 *   2. **Module's own settings** — for the root app, the values under
 	 *      `moduleSettings.mixr.*`. For a submodule, the values declared in
 	 *      its own `variables.settings.mixr.*` from its ModuleConfig.cfc.
@@ -480,9 +480,11 @@ component
 	}
 
 	/**
-	 * Mixr's system defaults — the values every module starts from before
-	 * its own settings (and any host overrides) are layered on. Kept in sync
-	 * with the defaults declared in mixr's ModuleConfig.cfc.
+	 * Mixr's system defaults — the canonical source of truth for every
+	 * setting key. Each module (root app or submodule) starts from these
+	 * values before its own settings (and any host overrides) are layered
+	 * on. `ModuleConfig.cfc` intentionally ships an empty `variables.settings`
+	 * so this method remains the single place defaults are declared.
 	 */
 	private struct function systemDefaults() {
 		return {
