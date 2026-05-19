@@ -69,7 +69,7 @@ component {
 			"criticalCss" : {
 				"enabled" : false,                 // OPT-IN
 				"path"    : "/includes/critical",  // module-relative directory
-				"suffix"  : ".critical.css"        // appended to event name
+				"suffix"  : "_critical.min.css"    // appended to event name
 			},
 
 			"modules" : {}
