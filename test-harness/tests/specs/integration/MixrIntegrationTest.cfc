@@ -25,16 +25,19 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				expect( p ).toInclude( "/tests/asset.js?id=" );
 			} );
 
-			it( "resolves a Vite production entry from the vite submodule", function(){
-				var p = mixr.path( entry = "resources/js/app.js", moduleName = "vite" );
-				expect( p ).toInclude( "/includes/build/assets/app-PROD123.js" );
+			it( "resolves a Vite production entry from the vite submodule, prefixed with the module root", function(){
+				var root = getRequestContext().getModuleRoot( "vite" );
+				var p    = mixr.path( entry = "resources/js/app.js", moduleName = "vite" );
+				expect( p ).toBe( root & "/includes/build/assets/app-PROD123.js" );
+				expect( p.startsWith( root & "/" ) ).toBeTrue( "path '#p#' should start with the module root '#root#'" );
 			} );
 
-			it( "renders Vite production tags from the vite submodule", function(){
+			it( "renders Vite production tags from the vite submodule with module-root-prefixed hrefs", function(){
+				var root = getRequestContext().getModuleRoot( "vite" );
 				var html = mixr.tags( entry = "resources/js/app.js", moduleName = "vite" );
-				expect( html ).toInclude( "app-PROD123.css" );
-				expect( html ).toInclude( "vendor-VEND456.js" );
-				expect( html ).toInclude( "app-PROD123.js" );
+				expect( html ).toInclude( root & "/includes/build/assets/app-PROD123.css" );
+				expect( html ).toInclude( root & "/includes/build/assets/vendor-VEND456.js" );
+				expect( html ).toInclude( root & "/includes/build/assets/app-PROD123.js" );
 			} );
 
 			it( "detects the hot file in the viteSpa submodule and renders dev tags", function(){

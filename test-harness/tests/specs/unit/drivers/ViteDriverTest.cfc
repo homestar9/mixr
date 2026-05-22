@@ -9,7 +9,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 		variables.watcher  = wirebox.getInstance( "HotFileWatcher@mixr" );
 	}
 
-	function buildDriver( required struct settings ){
+	function buildDriver( required struct settings, string moduleRoot = "" ){
 		structAppend(
 			arguments.settings,
 			{
@@ -32,7 +32,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 			name          = "ViteDriver@mixr",
 			initArguments = {
 				settings   : arguments.settings,
-				moduleRoot : "",
+				moduleRoot : arguments.moduleRoot,
 				store      : variables.store,
 				watcher    : variables.watcher,
 				renderer   : variables.renderer
@@ -130,6 +130,109 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				var a = d.bundle( "resources/js/app.js" );
 				var b = d.bundle( "resources/js/app.js" );
 				expect( a ).toBe( b );
+			} );
+
+			describe( "prependModuleRoot (mounted-module asset URLs)", function(){
+				// moduleRoot prefixes BOTH the manifest/hot path (init joins
+				// moduleRoot + manifestPath) and the emitted asset URLs — exactly
+				// as in a real mounted module, whose manifest lives under its
+				// mount root. So we frame these as a module mounted at /tests
+				// (where the fixtures actually live) and express manifestPath /
+				// hotFilePath relative to that mount.
+				it( "prod, mounted module: prefixes path() and every bundle URL with the module root", function(){
+					var d = buildDriver( { manifestPath : "/resources/vite/manifest-with-imports.json" }, "/tests" );
+					expect( d.path( "resources/js/app.js" ) ).toBe( "/tests/includes/build/assets/app-abc123.js" );
+
+					var b = d.bundle( "resources/js/app.js" );
+					expect( b.js ).toBe( "/tests/includes/build/assets/app-abc123.js" );
+					expect( b.css ).notToBeEmpty();
+					for ( var href in b.css ) {
+						expect( href.startsWith( "/tests/" ) ).toBeTrue( "css href '#href#' should start with /tests/" );
+					}
+					expect( b.preload ).notToBeEmpty();
+					for ( var href in b.preload ) {
+						expect( href.startsWith( "/tests/" ) ).toBeTrue( "preload href '#href#' should start with /tests/" );
+					}
+				} );
+
+				it( "prod, mounted module, prependModuleRoot=false: URLs are NOT prefixed", function(){
+					var d = buildDriver(
+						{
+							manifestPath      : "/resources/vite/manifest-with-imports.json",
+							prependModuleRoot : false
+						},
+						"/tests"
+					);
+					expect( d.path( "resources/js/app.js" ) ).toBe( "/includes/build/assets/app-abc123.js" );
+
+					var b = d.bundle( "resources/js/app.js" );
+					expect( b.js ).toBe( "/includes/build/assets/app-abc123.js" );
+					for ( var href in b.css ) {
+						expect( href.startsWith( "/includes/build/" ) ).toBeTrue( "css href '#href#' should be un-prefixed" );
+					}
+					for ( var href in b.preload ) {
+						expect( href.startsWith( "/includes/build/" ) ).toBeTrue( "preload href '#href#' should be un-prefixed" );
+					}
+				} );
+
+				it( "prod, moduleRoot='' (root app): no double slashes; equals buildPath + file", function(){
+					var d = buildDriver( { manifestPath : "/tests/resources/vite/manifest-with-imports.json" }, "" );
+					var p = d.path( "resources/js/app.js" );
+					expect( p ).toBe( "/includes/build/assets/app-abc123.js" );
+					expect( p ).notToInclude( "//" );
+				} );
+
+				it( "prod, CSS-only entry, mounted module: prefix is applied to the css entry file too", function(){
+					var d = buildDriver( { manifestPath : "/resources/vite/manifest-css-only-entry.json" }, "/tests" );
+					var b = d.bundle( "resources/scss/app.scss" );
+					expect( b.js ).toBe( "" );
+					expect( b.css ).notToBeEmpty();
+					expect( b.css[ 1 ] ).toBe( "/tests/includes/build/assets/styles-DjqQenkQ.css" );
+				} );
+
+				it( "dev (isHot=true), mounted module: URLs stay the absolute dev-server URLs, un-prefixed", function(){
+					var d = buildDriver(
+						{
+							manifestPath : "/resources/vite/manifest-with-imports.json",
+							hotFilePath  : "/resources/vite/hot",
+							devMode      : true
+						},
+						"/tests"
+					);
+					expect( d.isHot() ).toBeTrue();
+					expect( d.path( "resources/js/app.js" ) ).toBe( "http://127.0.0.1:5173/resources/js/app.js" );
+					expect( d.bundle( "resources/js/app.js" ).js ).toBe( "http://127.0.0.1:5173/resources/js/app.js" );
+				} );
+
+				it( "prod, mounted module: explicit prependModuleRoot=true prefixes the same as the default", function(){
+					var d = buildDriver(
+						{
+							manifestPath      : "/resources/vite/manifest-with-imports.json",
+							prependModuleRoot : true
+						},
+						"/tests"
+					);
+					expect( d.path( "resources/js/app.js" ) ).toBe( "/tests/includes/build/assets/app-abc123.js" );
+				} );
+
+				it( "prod, mounted module: path() caches the prefixed URL — a second call is identical (no double prefix)", function(){
+					var d = buildDriver( { manifestPath : "/resources/vite/manifest-with-imports.json" }, "/tests" );
+					var first  = d.path( "resources/js/app.js" );
+					var second = d.path( "resources/js/app.js" );
+					expect( first ).toBe( "/tests/includes/build/assets/app-abc123.js" );
+					expect( second ).toBe( first );
+				} );
+
+				it( "prod, mounted module: cssTags() and jsTags() emit module-root-prefixed hrefs", function(){
+					var d = buildDriver( { manifestPath : "/resources/vite/manifest-with-imports.json" }, "/tests" );
+
+					var css = d.cssTags( "resources/js/app.js" );
+					expect( css ).toInclude( "href=""/tests/includes/build/assets/app-abc123.css""" );
+
+					var js = d.jsTags( "resources/js/app.js" );
+					expect( js ).toInclude( "href=""/tests/includes/build/assets/vendor-def456.js""" );
+					expect( js ).toInclude( "src=""/tests/includes/build/assets/app-abc123.js""" );
+				} );
 			} );
 
 			describe( "critical CSS", function(){

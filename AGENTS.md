@@ -109,12 +109,12 @@ Backward-compat: `Mixr.get(asset, moduleName)` is preserved as an alias for `pat
 
 **`models/drivers/AbstractDriver.cfc`** holds the per-driver state every driver needs: `settings`, `moduleRoot`, the support collaborators, and four derived caches (`_paths`, `_bundles`, `_tags`, `_criticalCache`). It also subscribes to `ManifestStore.onReload(absoluteManifestPath, callback=clearCaches)` so that a hot-reloaded manifest invalidates the driver's derived caches automatically. Every driver extends this. Also exposes `readCriticalCss(eventName)` — reads the per-route critical CSS file (under `settings.criticalCss.path` joined with `eventName + settings.criticalCss.suffix`), caches the contents per event with dev-mode mtime throttling, and rejects files containing literal `</style>` (throws `MalformedCriticalCss`). Returns `""` when disabled, in dev (`isHot()`), no event, or file missing — so drivers fall through to standard rendering.
 
-**`models/drivers/ManifestDriver.cfc`** — flat src→dist lookup with optional `prependModuleRoot` / `prependPath`. Throws `ManifestAssetNotFound` for unknown keys. `isHot()` is always false; `viteClient()` is always empty.
+**`models/drivers/ManifestDriver.cfc`** — flat src→dist lookup with optional `prependModuleRoot` / `prependPath`. `prependPath` is flat-manifest only; `prependModuleRoot` is honored by **both** drivers (see ViteDriver below). Throws `ManifestAssetNotFound` for unknown keys. `isHot()` is always false; `viteClient()` is always empty.
 
 **`models/drivers/ViteDriver.cfc`** — Vite manifest. Two modes:
 
-- **Production** (`isHot()==false`): Looks up the entry, walks `imports[]` recursively, collecting `css[]` (when `includeImportedCss`) and imported chunk JS files (when `renderModulePreload`). Returns a normalized bundle: `{ js, css[], preload[], criticalCss }`. Throws `EntryNotFound`.
-- **Dev** (hot file present + `devMode=true`): Skips manifest reads. `path()` returns `<devUrl>/<entry>`; `tags()` emits a single dev-server `<script type="module">`.
+- **Production** (`isHot()==false`): Looks up the entry, walks `imports[]` recursively, collecting `css[]` (when `includeImportedCss`) and imported chunk JS files (when `renderModulePreload`). Returns a normalized bundle: `{ js, css[], preload[], criticalCss }`. Throws `EntryNotFound`. Every emitted asset URL (`path()` and `bundle()`'s `js`/`css[]`/`preload[]`) goes through the private `assetUrl( file )` helper, which builds `joinPath( buildPath, file )` and then — gated by `settings.prependModuleRoot` (default `true`) — prepends `variables.moduleRoot` so a module mounted at `/admin` emits `/admin/includes/build/...`. **`prependPath` is intentionally NOT applied by ViteDriver** — the Vite manifest already encodes each file's path under `buildPath`. The `_paths`/`_bundles` caches need no key change: each driver instance is pinned to one `moduleRoot`.
+- **Dev** (hot file present + `devMode=true`): Skips manifest reads. `path()` returns `<devUrl>/<entry>`; `tags()` emits a single dev-server `<script type="module">`. Dev-server URLs are absolute and **never** module-root-prefixed (`assetUrl()` is only reached in the prod branches).
 
 **Bundle's `criticalCss` field is stitched outside the `_bundles` cache.** The cache holds only manifest-derived parts (`js`, `css[]`, `preload[]`); each `bundle()` call returns a fresh struct that copies those cached fields and adds a fresh `readCriticalCss()` read. Critical CSS is event-keyed and mtime-volatile in dev — caching it inside `_bundles` would require event/mtime in the cache key. `readCriticalCss()` has its own throttled mtime cache, so the per-call read is cheap.
 
@@ -200,11 +200,11 @@ This is a harness quirk, not a mixr bug. Do not push the forced reload into `mix
 
 ## Engine support
 
-Last verified passing 40/40 specs on the 3.0 baseline (pre-`criticalCss` API additions). The new `bundle().criticalCss` and `mixr().criticalCss()` specs add ~17 specs across the unit + integration suites — re-verify counts after running:
+Last verified passing **140/140 specs on Lucee 5.4.8.2** (full suite, after the `prependModuleRoot` Vite fix added 8 `ViteDriverTest` specs). The other supported engines below were last verified on the `criticalCss` baseline — **re-verify them before merging** (the `prependModuleRoot` change has only been run on Lucee 5 so far):
 
-- Lucee 5.4.8.2
-- Lucee 6.2.6.19
-- Adobe ColdFusion 2018, 2021, 2023
+- Lucee 5.4.8.2 — ✓ 140/140
+- Lucee 6.2.6.19 — re-verify
+- Adobe ColdFusion 2018, 2021, 2023 — re-verify
 
 BoxLang is currently unverified (test runner returns 500 under 1.13; root cause not yet known).
 

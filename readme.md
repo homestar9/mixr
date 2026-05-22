@@ -121,8 +121,8 @@ changing.
 | `devMode` | `false` | Enables hot-file polling. Turn on in your dev environment. |
 | `renderModulePreload` | `true` | Emit `<link rel="modulepreload">` for imported JS chunks. |
 | `includeImportedCss` | `true` | Walk imported chunks for `.css` and emit `<link rel="stylesheet">`. |
-| `prependModuleRoot` | `true` | Flat-manifest only. Prepend the module root to resolved URLs. |
-| `prependPath` | `"/includes"` | Flat-manifest only. Path prefix prepended to resolved URLs. |
+| `prependModuleRoot` | `true` | Prepend the module root to resolved URLs. Applies to both drivers: the Vite driver prepends it so a module mounted at an arbitrary path emits asset URLs that resolve from that mount point. Set `false` if you want bare `buildPath` URLs. |
+| `prependPath` | `"/includes"` | Flat-manifest only. Path prefix prepended to resolved URLs. (Not applied by the Vite driver, whose manifest already encodes each file's path under `buildPath`.) |
 | `cache.enabled` | `true` | Cache parsed manifests in memory. |
 | `cache.devCheckInterval` | `2000` | Hot-file recheck cadence in dev, in ms. `0` = every request; `-1` = never (treat dev like prod). |
 | `criticalCss.enabled` | `false` | Opt-in critical-CSS inlining. See section below. |
@@ -157,6 +157,14 @@ Submodules can also bring their own settings via
 `variables.settings.mixr = {...}` in their own `ModuleConfig.cfc`. Each
 module's config is independent: the root app's settings don't cascade
 down.
+
+Asset URLs are mount-aware. A module mounted at, say, `/admin` emits its
+Vite asset URLs prefixed with that mount point (e.g.
+`/admin/includes/build/assets/app-abc.js`), so a distributed module works
+wherever the host app mounts it without any hand-prefixing. This is
+controlled by `prependModuleRoot` (default `true`); set it to `false` for
+bare `buildPath` URLs. (Dev-server URLs in hot mode are absolute and never
+prefixed.)
 
 ---
 

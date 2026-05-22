@@ -37,7 +37,7 @@ component extends="AbstractDriver" {
 		if ( variables._paths.keyExists( key ) ) return variables._paths[ key ];
 
 		var node = lookupEntry( arguments.entry );
-		var built = joinPath( variables.settings.buildPath, node.file );
+		var built = assetUrl( node.file );
 		variables._paths[ key ] = built;
 		return built;
 	}
@@ -256,9 +256,9 @@ component extends="AbstractDriver" {
 				walkPreload( node, manifest, preloadBag );
 			}
 
-			var entryFile = joinPath( variables.settings.buildPath, node.file );
-			var cssList = cssBag.out.map( ( f ) => joinPath( variables.settings.buildPath, f ) );
-			var preloadList = preloadBag.out.map( ( f ) => joinPath( variables.settings.buildPath, f ) );
+			var entryFile = assetUrl( node.file );
+			var cssList = cssBag.out.map( ( f ) => assetUrl( f ) );
+			var preloadList = preloadBag.out.map( ( f ) => assetUrl( f ) );
 
 			// CSS-only entry: the manifest's `file` IS the compiled stylesheet,
 			// not a script. Route it into css[] (prepended so it renders as the
@@ -313,6 +313,25 @@ component extends="AbstractDriver" {
 	}
 
 	/* ------------------------------------------------------------------ */
+
+	/**
+	 * Resolve a built asset's public URL: buildPath + file, optionally prefixed
+	 * with the module root so a mounted module's assets resolve wherever it is
+	 * mounted. prependPath is intentionally NOT applied here — the Vite manifest
+	 * already encodes each file's path relative to buildPath.
+	 *
+	 * @file Built file path from the manifest (e.g. "assets/app-abc.js").
+	 */
+	private string function assetUrl( required string file ) {
+		var built   = joinPath( variables.settings.buildPath, arguments.file );
+		var prepend = variables.settings.keyExists( "prependModuleRoot" )
+			? variables.settings.prependModuleRoot
+			: true;
+		if ( prepend ) {
+			built = joinPath( variables.moduleRoot, built );
+		}
+		return built;
+	}
 
 	/**
 	 * Look up an entry node in the parsed manifest.
