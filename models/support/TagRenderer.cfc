@@ -24,14 +24,24 @@ component singleton {
 	 *   preload: [ "/includes/build/assets/vendor-def.js", ... ]
 	 * }
 	 *
+	 * `attributes` decorate the entry's own tag — the `<script>` for a JS entry
+	 * (its imported CSS `<link>`s stay bare), or the stylesheet `<link>`(s) for a
+	 * CSS-only entry (one whose manifest `file` is a `.css`, so `bundle.js` is
+	 * empty). modulepreload links are never decorated.
+	 *
 	 * @bundle     Normalized bundle struct as produced by ViteDriver.bundle().
-	 * @attributes Extra HTML attributes to add to the <script> tag (escaped).
+	 * @attributes Extra HTML attributes for the entry's own tag (escaped).
 	 */
 	string function viteProductionTags( required struct bundle, struct attributes = {} ) {
 		var out = createObject( "java", "java.lang.StringBuilder" ).init();
 
+		// attributes decorate the entry's OWN tag: the <script> for a JS entry
+		// (imported CSS links stay bare), or the stylesheet <link>(s) for a
+		// CSS-only entry (bundle.js empty). modulepreload links stay bare.
+		var cssAttrs = len( arguments.bundle.js ) ? {} : arguments.attributes;
+
 		for ( var href in arguments.bundle.css ) {
-			out.append( linkTag( href = href, rel = "stylesheet" ) );
+			out.append( linkTag( href = href, rel = "stylesheet", extraAttrs = cssAttrs ) );
 		}
 		for ( var href in arguments.bundle.preload ) {
 			out.append( linkTag( href = href, rel = "modulepreload" ) );
@@ -138,7 +148,9 @@ component singleton {
 	 *
 	 * @inlineCss  Raw critical CSS body. Empty string suppresses the <style>.
 	 * @bundle     Normalized bundle struct as produced by ViteDriver.bundle().
-	 * @attributes Extra HTML attributes for plain `<link rel="stylesheet">` (escaped).
+	 * @attributes Extra HTML attributes for the stylesheet `<link>` — applied to
+	 *             the plain `<link rel="stylesheet">` in the standard branch and
+	 *             to the preload-swap `<link>` in the critical branch (escaped).
 	 * @options    { nonce, fetchpriority, criticalMode }. When `criticalMode` is
 	 *             true the CSS hrefs are async-loaded via preload-swap even if
 	 *             `inlineCss` is empty (the caller has suppressed the inline body
@@ -156,8 +168,11 @@ component singleton {
 			if ( len( arguments.inlineCss ) ) {
 				out.append( inlineStyleTag( arguments.inlineCss, nonce ) );
 			}
+			// This renderer is reached only from cssTags(), where `attributes`
+			// always means "the stylesheet attributes" — apply unconditionally
+			// (matches the non-critical branch below). No bundle.js gating here.
 			for ( var href in arguments.bundle.css ) {
-				out.append( preloadSwapTag( href, nonce, fetchpriority, {} ) );
+				out.append( preloadSwapTag( href, nonce, fetchpriority, arguments.attributes ) );
 			}
 		} else {
 			for ( var href in arguments.bundle.css ) {
@@ -217,11 +232,17 @@ component singleton {
 
 		var out = createObject( "java", "java.lang.StringBuilder" ).init();
 
+		// Same rule as viteProductionTags(): attributes decorate the entry's own
+		// tag. For a CSS-only entry (bundle.js empty) the entry's stylesheet is
+		// async-loaded via the preload-swap <link>, so attributes land there; a
+		// JS entry's imported CSS stays bare (attributes go on the <script>).
+		var cssAttrs = len( arguments.bundle.js ) ? {} : arguments.attributes;
+
 		if ( len( arguments.inlineCss ) ) {
 			out.append( inlineStyleTag( arguments.inlineCss, nonce ) );
 		}
 		for ( var href in arguments.bundle.css ) {
-			out.append( preloadSwapTag( href, nonce, fetchpriority, {} ) );
+			out.append( preloadSwapTag( href, nonce, fetchpriority, cssAttrs ) );
 		}
 		for ( var href in arguments.bundle.preload ) {
 			out.append( linkTag( href = href, rel = "modulepreload" ) );

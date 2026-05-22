@@ -531,6 +531,28 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( d.criticalCss() ).toBe( "" );
 				} );
 			} );
+
+			describe( "CSS-only entry via tags()", function(){
+				it( "prod: tags() decorates the stylesheet <link> with attributes (entry has no script)", function(){
+					var d    = buildDriver( { manifestPath : "/tests/resources/vite/manifest-css-only-entry.json" } );
+					var html = d.tags( "resources/scss/app.scss", { attributes: { "data-foo": true } } );
+					expect( html ).toInclude( "<link rel=""stylesheet"" href=""/includes/build/assets/styles-DjqQenkQ.css""" );
+					expect( html ).toInclude( "data-foo" );
+					expect( html ).notToInclude( "<script" );
+				} );
+
+				it( "dev: tags() emits the dev-server module script for the .scss entry", function(){
+					var d = buildDriver( {
+						manifestPath : "/tests/resources/vite/manifest-css-only-entry.json",
+						hotFilePath  : "/tests/resources/vite/hot",
+						devMode      : true
+					} );
+					expect( d.isHot() ).toBeTrue();
+					var html = d.tags( "resources/scss/app.scss" );
+					expect( html ).toInclude( "<script type=""module"" src=""http://127.0.0.1:5173/resources/scss/app.scss""" );
+					expect( html ).notToInclude( "<link rel" );
+				} );
+			} );
 		} );
 	}
 

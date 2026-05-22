@@ -61,6 +61,8 @@ Defines the global `mixr()` UDF. Call shapes:
 mixr().path( "resources/js/app.js" )                      // fluent, current module — single URL string
 mixr().bundle( "resources/js/app.js" )                    // fluent — { js, css[], preload[], criticalCss } struct
 mixr().tags( "resources/js/app.js" )                      // fluent — fully-rendered HTML
+mixr().cssTags( "resources/js/app.js" )                   // fluent — CSS half of tags() (stylesheet <link>s / critical block)
+mixr().jsTags( "resources/js/app.js" )                    // fluent — JS half of tags() (modulepreload + entry <script>)
 mixr().criticalCss()                                      // fluent — inline critical CSS body for current event
 mixr().criticalCss( "main.index" )                        // fluent — inline body for an explicit event (eventName positional)
 mixr( moduleName = "admin" ).tags( "resources/js/admin.js" )  // fluent, explicit module
@@ -125,6 +127,8 @@ Backward-compat: `Mixr.get(asset, moduleName)` is preserved as an alias for `pat
 **`models/support/HotFileWatcher.cfc`** (singleton) — Reads Vite's hot file (default `/includes/hot`). Production short-circuits to false without disk I/O. Dev throttles by `cache.devCheckInterval`. URL has trailing slashes stripped.
 
 **`models/support/TagRenderer.cfc`** (singleton) — Pure HTML serialization. Drivers hand it normalized data; it produces `<script>`/`<link>` strings with HTML-escaped attributes. Audit attribute escaping here, not in drivers.
+
+**Attribute decoration contract.** `options.attributes` decorate the tag the entry actually renders. In the `tags()`-driven renderers (`viteProductionTags`, `viteCriticalProductionTags`) this is gated by `cssAttrs = len( bundle.js ) ? {} : attributes`: a JS entry's own tag is the `<script>` (its imported CSS `<link>`s — plain or preload-swap — stay bare); a CSS-only entry (manifest `file` is a `.css`, so `bundle.js == ""`) has no script, so its stylesheet `<link>` carries them. The inline critical `<style>` body is never decorated. `viteCssTags` is reached only from the explicit `cssTags()` method, where `attributes` always mean "the stylesheet attributes" — it applies them to every CSS `<link>` **unconditionally** (no `bundle.js` gating), which is how `cssTags()` reaches the one case `tags()` cannot: decorating a JS entry's imported CSS links. The flat `ManifestDriver` needs no special-casing — one entry resolves to one tag, so `manifestTag()`/`criticalCssTags()` already apply `attributes` to whatever single tag they emit.
 
 ### Per-call flow
 

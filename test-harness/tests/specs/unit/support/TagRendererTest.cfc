@@ -49,6 +49,60 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				expect( html ).toInclude( "data-x=""&lt;bad&gt;""" );
 			} );
 
+			describe( "attributes on CSS-only entries", function(){
+				it( "applies attributes to the stylesheet <link> for a CSS-only entry (no script)", function(){
+					var html = r.viteProductionTags(
+						bundle     = { js : "", css : [ "assets/styles-x.css" ], preload : [] },
+						attributes = { "data-foo" : true }
+					);
+					expect( html ).toInclude( "<link rel=""stylesheet"" href=""assets/styles-x.css""" );
+					expect( html ).toInclude( "data-foo" );
+				} );
+
+				it( "leaves a JS entry's imported CSS <link> bare and decorates only the <script>", function(){
+					var html = r.viteProductionTags(
+						bundle     = { js : "assets/app.js", css : [ "assets/app.css" ], preload : [] },
+						attributes = { defer : true }
+					);
+					// imported CSS link is bare (exact self-closing form proves no defer)
+					expect( html ).toInclude( "<link rel=""stylesheet"" href=""assets/app.css"" />" );
+					// the entry script carries the attribute
+					expect( html ).toInclude( "<script type=""module"" src=""assets/app.js"" defer></script>" );
+				} );
+
+				it( "viteCriticalProductionTags: attributes land on the preload-swap <link> for a CSS-only entry", function(){
+					var html = r.viteCriticalProductionTags(
+						inlineCss  = ".a{}",
+						bundle     = { js : "", css : [ "assets/x.css" ], preload : [] },
+						attributes = { "data-foo" : true }
+					);
+					expect( html ).toInclude( "rel=""preload""" );
+					expect( html ).toInclude( "data-foo" );
+				} );
+
+				it( "viteCriticalProductionTags: a JS entry's preload-swap <link> stays bare (attrs go on the script)", function(){
+					var html = r.viteCriticalProductionTags(
+						inlineCss  = ".a{}",
+						bundle     = { js : "assets/app.js", css : [ "assets/x.css" ], preload : [] },
+						attributes = { "data-foo" : true }
+					);
+					// bare preload link ends with the fetchpriority attr + self-close
+					expect( html ).toInclude( "fetchpriority=""high"" />" );
+					// the attribute is on the script instead
+					expect( html ).toInclude( "data-foo></script>" );
+				} );
+
+				it( "viteCssTags criticalMode: attributes land on the preload-swap <link> regardless of bundle.js", function(){
+					var html = r.viteCssTags(
+						inlineCss  = ".a{}",
+						bundle     = { js : "assets/app.js", css : [ "assets/x.css" ], preload : [] },
+						attributes = { "data-foo" : true }
+					);
+					expect( html ).toInclude( "rel=""preload""" );
+					expect( html ).toInclude( "data-foo" );
+				} );
+			} );
+
 			describe( "criticalCssTags()", function(){
 				it( "emits inline #encodeForHtml( "<style>" )# + preload-swap + #encodeForHtml( "<noscript>" )# with fetchpriority=high by default", function(){
 					var html = r.criticalCssTags(

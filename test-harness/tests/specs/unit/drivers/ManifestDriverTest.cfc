@@ -98,7 +98,24 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				expect( d.isHot() ).toBeFalse();
 			} );
 
-			describe( "critical CSS", function(){
+			describe( "attributes (regression guard)", function(){
+					it( "tags() applies attributes to a CSS asset's <link> and a JS asset's <script>", function(){
+						var d = buildDriver( {
+							manifestPath      : "/tests/resources/mix-manifest.json",
+							prependModuleRoot : false,
+							prependPath       : ""
+						} );
+						var css = d.tags( "/css/app.css", { attributes: { "data-foo": true } } );
+						expect( css ).toInclude( "rel=""stylesheet""" );
+						expect( css ).toInclude( "data-foo" );
+
+						var js = d.tags( "/tests/asset.js", { attributes: { defer: true } } );
+						expect( js ).toInclude( "<script src=""/tests/asset.js" );
+						expect( js ).toInclude( "defer" );
+					} );
+				} );
+
+				describe( "critical CSS", function(){
 				it( "for a CSS asset: emits inline #encodeForHtml( "<style>" )# + preload-swap when enabled and file exists", function(){
 					var d = buildDriver( {
 						manifestPath      : "/tests/resources/mix-manifest.json",

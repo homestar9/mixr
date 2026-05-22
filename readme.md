@@ -105,6 +105,74 @@ current request, so submodule configs just work.
 
 ---
 
+## Adding HTML attributes
+
+`tags()`, `cssTags()`, and `jsTags()` take an options struct whose
+`attributes` key adds extra HTML attributes to the tag they render:
+
+```cfm
+#mixr().tags( "resources/js/app.js", { attributes: { defer: true } } )#
+<!-- <script type="module" src="..." defer></script> -->
+
+#mixr().tags( "resources/scss/app.scss", { attributes: { "data-theme": "dark" } } )#
+<!-- prod: <link rel="stylesheet" href="..." data-theme="dark" /> -->
+<!-- dev:  <script type="module" src=".../app.scss"></script>      -->
+```
+
+**The rule (both drivers): `attributes` decorate the tag the entry actually renders.**
+
+- **Flat manifest** (Laravel Mix / Elixir / Webpack): an entry always
+  resolves to one tag - a `<link>` for a `.css` asset or a `<script>`
+  for a `.js` asset - so the attributes land on that tag.
+- **Vite, JS entry**: the attributes land on the entry `<script>`. Its
+  imported CSS `<link>`s stay bare.
+- **Vite, CSS-only entry** (a Vite input whose compiled `file` is a
+  `.css`, like an `app.scss` Rollup input): the attributes land on the
+  stylesheet `<link>` in production, and on the dev-server `<script>` in
+  dev. One `tags()` call is correct in both modes, so prefer `tags()` for
+  stylesheet entries.
+
+### When you need finer control
+
+Reach for `cssTags()` / `jsTags()` when CSS and JS must render in
+different parts of the document, need different attributes, or you want to
+decorate a Vite JS entry's *imported* CSS links (the one case `tags()`
+cannot reach - `cssTags()` applies its `attributes` to every stylesheet
+`<link>` it emits). The method name selects the target, so you do not need
+separate `linkAttributes` / `scriptAttributes` options.
+
+```cfm
+#mixr().cssTags( "resources/js/app.js", { attributes: { media: "screen" } } )#
+#mixr().jsTags( "resources/js/app.js", { attributes: { defer: true } } )#
+```
+
+One caveat: for a CSS-only entry, `cssTags()` returns `""` in dev (the dev
+styles come from `jsTags()`'s dev-server script), so the split methods on a
+stylesheet entry only render correctly across modes if you emit both. This
+is why `tags()` is the recommendation for stylesheet entries.
+
+### Attribute behavior
+
+The `attributes` bag is open-ended - any key you pass is rendered, so new
+HTML attributes work without a Mixr change. A few rules keep it predictable:
+
+- **Booleans**: pass a real boolean. `{ defer: true }` renders a bare
+  `defer` attribute; `false` (or omitting the key) renders nothing. Note
+  `{ defer: 1 }` renders `defer="1"` because `1` is a number, not a boolean.
+- **Escaping**: attribute *values* are HTML-escaped; keys are lowercased
+  and emitted as-is. Build attribute keys from your own code, not from
+  end-user input.
+- **`integrity` / SRI**: Mixr renders an `integrity` value if you pass one,
+  but it does not compute the hash. Vite filenames are content-hashed and
+  change every build, and Vite emits no SRI by default, so generating the
+  hash is your build pipeline's job.
+
+Common attributes you might pass: `defer`, `async`, `crossorigin`,
+`integrity`, `nonce`, `fetchpriority`, `referrerpolicy`, `media`, and any
+`data-*` attribute.
+
+---
+
 ## Configuration
 
 Quick start covers the working defaults. Here's the full list, in case
