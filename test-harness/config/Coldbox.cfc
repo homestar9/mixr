@@ -4,7 +4,7 @@
 	function configure(){
 
 		// coldbox directives
-		coldbox = {
+		variables.coldbox = {
 			//Application Setup
 			appName 				= "Module Tester",
 
@@ -36,12 +36,12 @@
 		// environment settings, create a detectEnvironment() method to detect it yourself.
 		// create a function with the name of the environment so it can be executed if that environment is detected
 		// the value of the environment is a list of regex patterns to match the cgi.http_host.
-		environments = {
+		variables.environments = {
 			development = "localhost,127\.0\.0\.1"
 		};
 
 		// Module Directives
-		modules = {
+		variables.modules = {
 			// An array of modules names to load, empty means all of them
 			include = [],
 			// An array of modules names to NOT load, empty means none
@@ -49,11 +49,11 @@
 		};
 
 		//Register interceptors as an array, we need order
-		interceptors = [
+		variables.interceptors = [
 		];
 
 		//LogBox DSL
-		logBox = {
+		variables.logBox = {
 			// Define Appenders
 			appenders = {
 				myConsole : { class : "ConsoleAppender" },
@@ -70,11 +70,24 @@
 			info = [ "coldbox.system" ]
 		};
 
-        moduleSettings = {
+        variables.moduleSettings = {
             mixr = {
+                // Harness root simulates a Laravel Mix app
+                "driver"            : "manifest",
+                "manifestPath"      : "/tests/resources/mix-manifest.json",
+                "prependModuleRoot" : false,
+                "prependPath"       : "",
+                "criticalCss" : {
+                    "enabled" : true,                 // OPT-IN
+                    "path"    : "/includes/critical",  // module-relative directory
+                    "suffix"  : ".critical.css"        // appended to event name
+                },
                 "modules": {
                     "fooModule": {
-                        "prependPath": "/includes/"
+                        "driver"            : "manifest",
+                        "manifestPath"      : "/public/mix-manifest.json",
+                        "prependModuleRoot" : true,
+                        "prependPath"       : "/includes"
                     }
                 }
             }
@@ -92,6 +105,23 @@
 				moduleName 		= request.MODULE_NAME,
 				invocationPath 	= "moduleroot"
 			);
+
+		// IMPORTANT: this harness registers the module-under-test from
+		// `afterAspectsLoad`, which fires AFTER `Renderer.startup()` has
+		// already loaded the global `applicationHelper` list into the
+		// singleton renderer's variables scope (see
+		// coldbox/system/web/services/LoaderService.cfc lines 88-102).
+		// Because of that ordering, mixr's `helpers/Mixins.cfm` is added
+		// to the setting too late for the renderer to ever pick it up,
+		// and views fail with "No matching function [MIXR]" while
+		// handlers work fine (handlers re-load helpers per request via
+		// onHandlerDIComplete). Real apps don't hit this because they
+		// load mixr via convention-based discovery during
+		// `activateAllModules()` BEFORE `Renderer.startup()` runs.
+		// Force the renderer to re-inject helpers so the harness can
+		// exercise view-side `mixr()` calls. This belongs in the harness,
+		// not in the module.
+		controller.getRenderer().loadApplicationHelpers( force = true );
 	}
 
 }

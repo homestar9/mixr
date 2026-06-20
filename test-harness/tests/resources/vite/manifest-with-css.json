@@ -1,0 +1,8 @@
+{
+    "resources/js/simple.js": {
+        "file": "assets/simple-aaa111.js",
+        "src": "resources/js/simple.js",
+        "isEntry": true,
+        "css": [ "assets/simple-aaa111.css" ]
+    }
+}

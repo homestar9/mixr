@@ -5,5 +5,10 @@
 		}
     ],
     "settings": {
+        "cflint.enabled": false,
+        "boxlang.debugger.moduleVersion": "1.1.1+2",
+        "chat.tools.terminal.autoApprove": {
+            "box": true
+        }
     }
 }

@@ -20,13 +20,19 @@
 <cfset url.path = replaceNoCase( url.path, '../', '', 'all' )>
 <cfset url.path = replaceNoCase( url.path, '..\', '', 'all' )>
 
-<!--- Prepare TestBox --->
-<cfset testbox = new testbox.system.TestBox()>
+<!--- Prepare TestBox (coverage disabled — force-compiling every harness .cfm
+     blows up on Lucee when cfchart isn't installed; see CacheCharting.cfm) --->
+<cfset testbox = new testbox.system.TestBox( options = { coverage : { enabled : false } } )>
 
 <!--- Run Tests Action?--->
 <cfif structKeyExists( url, "action")>
 	<cfif directoryExists( expandPath( rootMapping & url.path ) )>
-		<cfoutput>#testbox.init( directory=rootMapping & url.path ).run()#</cfoutput>
+		<!--- Convert "/tests/specs" + "/" or "/unit/drivers" → "tests.specs(.unit.drivers)" so
+		      TestBox.getSpecPaths produces clean dotted bundle names. Slash-form mappings on
+		      Lucee 6 yield mixed slash+dot bundle paths that fail to resolve past the first one. --->
+		<cfset directoryMapping = reReplace( rootMapping & url.path, "^/+|/+$", "", "all" )>
+		<cfset directoryMapping = replace( directoryMapping, "/", ".", "all" )>
+		<cfoutput>#testbox.init( directory=directoryMapping, options={ coverage : { enabled : false } } ).run()#</cfoutput>
 	<cfelse>
 		<cfoutput><h2>Invalid incoming directory: #rootMapping & url.path#</h2></cfoutput>
 	</cfif>

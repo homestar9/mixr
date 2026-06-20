@@ -1,213 +1,487 @@
 # Mixr
 
-![Mixr Logo](https://github.com/homestar9/mixr/blob/master/mixr.svg?raw=true)
+![Mixr Logo](https://github.com/homestar9/mixr/blob/master/mixr-logo.webp?raw=true)
 
-Mixr is a simple, yet flexible static asset helper for Coldbox applications.  Mixr can be configured to use a variety of conventions including Coldbox Elixir, Laravel Mix, or even custom asset bundlers.
+**Mixr** takes logical asset paths like `resources/js/app.js`, looks up the
+hashed file your bundler emitted, and renders the `<script>` / `<link>`
+tags for you.
 
-Use Mixr in your app to automatically generate correct distribition asset paths in your Coldbox views and layouts.  Mixr automatically parses and maps asset manifests files to return the real path.
+It works with **Vite** (production manifest plus dev-server hot reload),
+**Webpack**, **Laravel Mix**, **ColdBox Elixir**, or any flat-key manifest
+you want to point it at. The `mixr()` helper is available everywhere:
+handlers, layouts, views, interceptors.
 
-Mixr registers itself as a Coldbox helper method so you can call it in your handlers, layouts, and views by simply calling `mixr()`.
+---
 
-## Installation
+## Install via CommandBox
 
-Install Mixr using CommandBox:
+Installation is as simple as:
 
 ```bash
 box install mixr
 ```
 
+---
+
+## Quick start (Vite)
+
+Using Vite in your project? Add a `mixr` struct to your root app's
+
+`config/Coldbox.cfc`:
+
+```js
+moduleSettings = {
+    mixr: {
+        driver       : "vite",
+        manifestPath : "/includes/build/.vite/manifest.json",
+        buildPath    : "/includes/build", 
+        hotFilePath  : "/includes/hot",
+        devMode      : getSystemSetting( "ENVIRONMENT", "production" ) eq "development",
+        // using rollup-plugin-critical for critical CSS inlining? 
+        // Enable it and set the suffix to match your plugin's output:
+        criticalCss         : {
+            enabled         : true,
+            suffix          : "_critical.min.css"
+        }
+    }
+};
+```
+
+In your layout:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    #mixr().viteClient()# <!-- ignored when devMode is false -->
+    #mixr().tags( "resources/js/app.js" )# <!-- css + preload + module script -->
+</head>
+<body>...</body>
+</html>
+```
+
+That's it. In **dev**, Mixr sees Vite's hot file and emits dev-server URLs
+plus `@vite/client`. In **prod**, it reads `manifest.json` and emits the
+hashed `<link rel="stylesheet">`, `<link rel="modulepreload">`, and
+`<script type="module">` tags, pulling in CSS chunks and module preloads
+for you.
+
+---
+
+## The `mixr()` helper
+
+There are three supported calling styles, all of which work with any driver:
+
+```cfm
+<!-- Fluent, current module (auto-detected) -->
+#mixr().tags( "resources/js/app.js" )#
+#mixr().path( "resources/js/app.js" )#
+#mixr().viteClient()#
+
+<!-- Fluent, explicit module -->
+#mixr( moduleName = "admin" ).tags( "resources/js/admin.js" )#
+
+<!-- Legacy 2.x string form (still supported, returns a URL) -->
+#mixr( "/js/app.js" )#
+#mixr( "/js/admin.js", "admin" )#
+```
+
+Skip `moduleName` and Mixr figures out which module is handling the
+current request, so submodule configs just work.
+
+### Fluent methods
+
+| Method | Returns | Notes |
+| --- | --- | --- |
+| `path( entry )` | `string` | Returns the resolved URL for one entry. |
+| `tags( entry )` | `string` | Full `<link>` / `<script>` HTML. Vite: aggregates CSS + module preloads. Manifest: a single `<script>` or `<link>` based on extension. Optionally inlines critical CSS — see below. |
+| `cssTags( entry )` | `string` | The CSS half of `tags()` — stylesheet `<link>`s (or inline `<style>` + preload-swap when critical CSS is enabled). Empty in Vite dev mode. Pair with `jsTags()` to put JS at the bottom of `<body>`. |
+| `jsTags( entry )` | `string` | The JS half of `tags()` — `<link rel="modulepreload">` + entry `<script type="module">` (or the dev-server script in dev). Pair with `cssTags()`. |
+| `bundle( entry )` | `struct` | `{ js, css[], preload[], criticalCss }` — for callers rendering tags by hand. |
+| `criticalCss( eventName )` | `string` | Inline critical CSS body for an event. Empty when disabled, in dev, or no file. |
+| `viteClient()` | `string` | `<script type="module" src=".../@vite/client"></script>`. Empty in prod. Deduped per request. |
+| `isHot()` | `boolean` | True when Vite's hot file exists. |
+| `refresh()` | `void` | Clears caches for this module (useful in tests). |
+
+---
+
+## Adding HTML attributes
+
+`tags()`, `cssTags()`, and `jsTags()` take an options struct whose
+`attributes` key adds extra HTML attributes to the tag they render:
+
+```cfm
+#mixr().tags( "resources/js/app.js", { attributes: { defer: true } } )#
+<!-- <script type="module" src="..." defer></script> -->
+
+#mixr().tags( "resources/scss/app.scss", { attributes: { "data-theme": "dark" } } )#
+<!-- prod: <link rel="stylesheet" href="..." data-theme="dark" /> -->
+<!-- dev:  <script type="module" src=".../app.scss"></script>      -->
+```
+
+**The rule (both drivers): `attributes` decorate the tag the entry actually renders.**
+
+- **Flat manifest** (Laravel Mix / Elixir / Webpack): an entry always
+  resolves to one tag - a `<link>` for a `.css` asset or a `<script>`
+  for a `.js` asset - so the attributes land on that tag.
+- **Vite, JS entry**: the attributes land on the entry `<script>`. Its
+  imported CSS `<link>`s stay bare.
+- **Vite, CSS-only entry** (a Vite input whose compiled `file` is a
+  `.css`, like an `app.scss` Rollup input): the attributes land on the
+  stylesheet `<link>` in production, and on the dev-server `<script>` in
+  dev. One `tags()` call is correct in both modes, so prefer `tags()` for
+  stylesheet entries.
+
+### When you need finer control
+
+Reach for `cssTags()` / `jsTags()` when CSS and JS must render in
+different parts of the document, need different attributes, or you want to
+decorate a Vite JS entry's *imported* CSS links (the one case `tags()`
+cannot reach - `cssTags()` applies its `attributes` to every stylesheet
+`<link>` it emits). The method name selects the target, so you do not need
+separate `linkAttributes` / `scriptAttributes` options.
+
+```cfm
+#mixr().cssTags( "resources/js/app.js", { attributes: { media: "screen" } } )#
+#mixr().jsTags( "resources/js/app.js", { attributes: { defer: true } } )#
+```
+
+One caveat: for a CSS-only entry, `cssTags()` returns `""` in dev (the dev
+styles come from `jsTags()`'s dev-server script), so the split methods on a
+stylesheet entry only render correctly across modes if you emit both. This
+is why `tags()` is the recommendation for stylesheet entries.
+
+### Attribute behavior
+
+The `attributes` bag is open-ended - any key you pass is rendered, so new
+HTML attributes work without a Mixr change. A few rules keep it predictable:
+
+- **Booleans**: pass a real boolean. `{ defer: true }` renders a bare
+  `defer` attribute; `false` (or omitting the key) renders nothing. Note
+  `{ defer: 1 }` renders `defer="1"` because `1` is a number, not a boolean.
+- **Escaping**: attribute *values* are HTML-escaped; keys are lowercased
+  and emitted as-is. Build attribute keys from your own code, not from
+  end-user input.
+- **`integrity` / SRI**: Mixr renders an `integrity` value if you pass one,
+  but it does not compute the hash. Vite filenames are content-hashed and
+  change every build, and Vite emits no SRI by default, so generating the
+  hash is your build pipeline's job.
+
+Common attributes you might pass: `defer`, `async`, `crossorigin`,
+`integrity`, `nonce`, `fetchpriority`, `referrerpolicy`, `media`, and any
+`data-*` attribute.
+
+---
+
 ## Configuration
 
-Configure Mixr in your Coldbox `config/Coldbox.cfc` file:
+Quick start covers the working defaults. Here's the full list, in case
+you need to tune something. You only have to set the keys you're actually
+changing.
 
-```js
-moduleSettings = {
-    // default configuration designed to emulate Laravel Mix 6
-    mixr: {
-        "manifestPath" = "/includes/mix-manifest.json",
-        "prependModuleRoot" = true,
-        "prependPath" = "/includes",
-        "modules": {}
-    }
-};
-```
-
-The above configuration will work in a ColdBox app that uses Laravel 6 to generate asset manifests.  If you are using Coldbox Elixir, you will need to change the configuration to match the conventions of your asset bundler.  See the [Upgrade Guide](#upgrade-guide) for more information.
-
-For reference, a Laravel 6 Manifest file might look like this:
-
-```js
-{
-    "/css/app.css": "/css/app.css?id=123",
-    "/js/app.js": "/js/app.js?id=123"
-}
-```
-
-The same manifest file might look like this when using Coldbox Elixir. You will need to update the default configuration if you are using Coldbox Elixir starting with Mixr version 2.0:
-
-```js
-{
-    "includes/js/app.js": "includes/js/app.123.js",
-    "includes/css/app.css": "includes/css/app.123.css"
-}
-``` 
-
-## Upgrade Guide
-
-### Upgrading from 1.x to 2.x
-
-Version 2.0 introduces a **breaking change** where the configuration defaults have been changed to emulate Laravel Mix 6.  If you are upgrading from 1.x to 2.x, and you use Coldbox Elixir, you will need to update your configuration (see examples for details)
-
-## Settings
-
-| Setting | Description | Default |
+| Setting | Default | Description |
 | --- | --- | --- |
-| `manifestPath` | (string) The path from the root where your manifest file resides | /includes/mix-manifest.json |
-| `prependModuleRoot` | (boolean) Whether or not to prepend the module root to the path | true |
-| `prependPath` | (string) A path to prepend to the asset path | /includes |
-| `modules` | (struct) A struct of module names so you can pass along custom configs to submodules | {} |
+| `driver` | `"auto"` | `"vite"`, `"manifest"`, or `"auto"`. Auto picks Vite when a hot file or Vite-shaped manifest is present, otherwise the flat-manifest driver. |
+| `manifestPath` | `"/includes/build/.vite/manifest.json"` | Path to the bundler's manifest JSON. |
+| `buildPath` | `"/includes/build"` | URL prefix where built assets live (Vite driver). |
+| `hotFilePath` | `"/includes/hot"` | Path to Vite's hot file. Its presence enables dev-mode rendering. |
+| `devServerUrl` | `""` | Dev-server URL fallback when the hot file is empty. |
+| `devMode` | `false` | Enables hot-file polling. Turn on in your dev environment. |
+| `renderModulePreload` | `true` | Emit `<link rel="modulepreload">` for imported JS chunks. |
+| `includeImportedCss` | `true` | Walk imported chunks for `.css` and emit `<link rel="stylesheet">`. |
+| `prependModuleRoot` | `true` | Prepend the module root to resolved URLs. Applies to both drivers: the Vite driver prepends it so a module mounted at an arbitrary path emits asset URLs that resolve from that mount point. Set `false` if you want bare `buildPath` URLs. |
+| `prependPath` | `"/includes"` | Flat-manifest only. Path prefix prepended to resolved URLs. (Not applied by the Vite driver, whose manifest already encodes each file's path under `buildPath`.) |
+| `cache.enabled` | `true` | Cache parsed manifests in memory. |
+| `cache.devCheckInterval` | `2000` | Hot-file recheck cadence in dev, in ms. `0` = every request; `-1` = never (treat dev like prod). |
+| `criticalCss.enabled` | `false` | Opt-in critical-CSS inlining. See section below. |
+| `criticalCss.path` | `"/includes/critical"` | Directory containing per-route critical CSS files. |
+| `criticalCss.suffix` | `".critical.css"` | Suffix appended to the event name to form the file name. |
+| `modules` | `{}` | Per-submodule overrides keyed by module name. See section below. |
 
-## Submodule Settings
+Heads up: the `cache` and `criticalCss` substructs merge **key-by-key**.
+If you override just `cache: { devCheckInterval: 5000 }`, the default
+`cache.enabled = true` still applies.
 
-Sometimes a tracked or untracked submodule needs to use its own asset manifest file conventions. For example, if you use Laravel Mix in your main app, but you use Coldbox Elixir in a submodule, you can configure Mixr to use different settings for each submodule.  
+---
 
-### Configure Via Submodule's ModuleConfig.cfc
+## Submodule overrides
 
-You can provide module-specific settings to Mixr, just in case some submodules use different conventions.  To do this within a module's `ModuleConfig.cfc` file, add a `mixr` struct to the `configure()` method:
-
-```js
-function configure(){
-    
-    // module settings - we are overriding mixr conventions in this module to emulate Coldbox Elixir
-    variables.settings = {
-        mixr: {
-            "manifestPath": "/includes/rev-manifest.json",
-            "prependModuleRoot": true,
-            "prependPath": "" 
-        }
-    };
-
-}
-```
-
-### Configure Via Coldbox.cfc
-
-Alternatively, you can also configure Mixr in your main `config/Coldbox.cfc` file.  Add any submodule to the `mixr.modules`  in `moduleSettings` like this to override settings:
+Need different settings per submodule? Drop them under
+`mixr.modules.<moduleName>` in the host app:
 
 ```js
 moduleSettings = {
-    // default configuration designed to emulate Coldbox Elixir
     mixr: {
-        "manifestPath" = "/includes/rev-manifest.json",
-        "prependModuleRoot" = true,
-        "prependPath" = "",
-        "modules": {
-            // custom configuration for a submodule to emaulate Laravel Mix V6
-            "fooModule": {
-                "manifestPath": "/includes/mix-manifest.json",
-                "prependModuleRoot": true,
-                "prependPath": "/includes"  
-            }
+        driver  : "vite",
+        modules : {
+            admin : { manifestPath : "/admin/build/.vite/manifest.json" },
+            blog  : { driver : "manifest", manifestPath : "/includes/rev-manifest.json" }
         }
     }
 };
 ```
 
+Submodules can also bring their own settings via
+`variables.settings.mixr = {...}` in their own `ModuleConfig.cfc`. Each
+module's config is independent: the root app's settings don't cascade
+down.
 
-## Usage
+Asset URLs are mount-aware. A module mounted at, say, `/admin` emits its
+Vite asset URLs prefixed with that mount point (e.g.
+`/admin/includes/build/assets/app-abc.js`), so a distributed module works
+wherever the host app mounts it without any hand-prefixing. This is
+controlled by `prependModuleRoot` (default `true`); set it to `false` for
+bare `buildPath` URLs. (Dev-server URLs in hot mode are absolute and never
+prefixed.)
 
-To return an asset path, simply call `mixr()` in your views, layouts, or handlers like this:
+---
+
+## Other bundlers (Laravel Mix, ColdBox Elixir, custom flat manifests)
+
+```js
+moduleSettings = {
+    mixr: {
+        driver            : "manifest",
+        manifestPath      : "/includes/mix-manifest.json",
+        prependModuleRoot : true,
+        prependPath       : "/includes"
+    }
+};
+```
+
 ```html
-// load javascript asset
+<link rel="stylesheet" href="#mixr( '/css/app.css' )#">
 <script src="#mixr( '/js/app.js' )#"></script>
-// load css assset
-<script src="#mixr( '/css/app.css' )#"></script>
 ```
 
-#### Method Arguments
+If you're coming from 2.x, the old string form (`mixr( "/path" )`) still
+works and honestly reads nicest with flat manifests. Use the fluent API
+if you want consistency across drivers.
 
-`mixr()` accepts the following arguments:
+---
 
-| Agument | Description | Default |  
-| --- | --- | --- |
-| `asset`* | (string) The path to the asset as it exists in the manifest file | "" |
-| `moduleName` | (string) module name where the manifest file is located | [currentModuleName] |
-| `manifestPath` | (string) The path from the root of the module where the manifest file resides | [config.manifestPath] |
-| `prependModuleRoot` | (boolean) Whether or not to prepend the module root to the path | [config.prependModuleRoot] |
-| `prependPath` | (string) A path to prepend to the asset path | [config.prependPath] |
+## Critical CSS (above-the-fold inlining)
 
-Mixr automatically attempts to figure out which module the request is coming from and will prepend the module root to the path if `prependModuleRoot` is set to `true`.
+Critical CSS is one of those page-speed wins that's still worth doing in
+2026. The idea: inline the above-the-fold styles into `<head>` as a
+`<style>` block, then async-load the rest (preload + onload swap, with a
+`<noscript>` fallback for JS-off). Mixr handles the rendering side. Pair
+it with any tool that emits per-route CSS files:
+[`vite-plugin-critical`](https://www.npmjs.com/package/vite-plugin-critical),
+[`laravel-mix-critical`](https://github.com/Pomax/laravel-mix-critical),
+or roll your own.
 
-### Examples
+### Enable it
 
-#### Coldbox Elixir
+1. Drop per-route files at `includes/critical/<event>.critical.css` —
+   e.g. `main.index.critical.css`, `blog.show.critical.css`.
+2. Set `criticalCss.enabled = true`.
+3. Keep calling `mixr().tags( "resources/js/app.js" )` as before.
+
+### What `tags()` emits
+
+Without critical CSS (default):
+
+```html
+<link rel="stylesheet" href="/includes/build/assets/app-abc.css" />
+<link rel="modulepreload" href="/includes/build/assets/vendor-def.js" />
+<script type="module" src="/includes/build/assets/app-abc.js"></script>
+```
+
+With critical CSS enabled and a fixture for the current event:
+
+```html
+<style>/* …inlined critical CSS… */</style>
+<link rel="preload" as="style" href="/includes/build/assets/app-abc.css"
+      onload="this.onload=null;this.rel='stylesheet'" fetchpriority="high" />
+<noscript><link rel="stylesheet" href="/includes/build/assets/app-abc.css" /></noscript>
+<link rel="modulepreload" href="/includes/build/assets/vendor-def.js" />
+<script type="module" src="/includes/build/assets/app-abc.js"></script>
+```
+
+If there's no critical file for the current event, Mixr falls through
+silently and you get the exact same output as if critical CSS were off.
+No surprises.
+
+### Per-call options
+
+Pass via `mixr().tags( entry, { … } )`:
+
+- `criticalEvent` *(default: current event)* — override the auto-detected event name.
+- `skipCritical` *(default: `false`)* — force standard output for this call.
+- `nonce` *(default: `""`)* — CSP nonce applied to both the `<style>` and the preload `<link>`.
+
+> **Dev note:** Critical CSS gets skipped whenever Vite's hot file is
+> around. HMR is already injecting CSS through JS, so inlining stale
+> critical files would just fight it. Want to preview the production
+> behavior locally? Run a production build (`npm run prod` or whatever
+> your project uses).
+
+For per-request dedupe across multiple `tags()` calls, advanced render
+patterns, and the `</style>` safety check, see [`AGENTS.md`](AGENTS.md).
+
+---
+
+## Splitting CSS and JS rendering
+
+A lot of performance-minded folks render CSS in `<head>` but defer
+JavaScript to the very bottom of `<body>` so the parser isn't blocked by
+script downloads. Mixr supports the split three ways — pick whichever
+matches how much help you want from the tool.
+
+### The easy split — `cssTags()` + `jsTags()`
+
+Two fluent helpers bisect what `tags()` would emit. Drop `cssTags()` in
+`<head>` and `jsTags()` immediately before `</body>`:
+
+```cfm
+<!doctype html>
+<html>
+<head>
+    #mixr().viteClient()#
+    #mixr().cssTags( "resources/js/app.js" )#
+</head>
+<body>
+    <!-- your markup -->
+
+    #mixr().jsTags( "resources/js/app.js" )#
+</body>
+</html>
+```
+
+That's it. Same entry on both calls; Mixr handles the rest:
+
+- `cssTags()` emits stylesheet `<link>`s in the standard branch, or
+  inline `<style>` + preload-swap when critical CSS is enabled — same
+  rules as `tags()`.
+- `jsTags()` emits `<link rel="modulepreload">` per imported chunk plus
+  the entry `<script type="module">`.
+- `cssTags( entry ) & jsTags( entry )` is byte-for-byte equivalent to
+  `tags( entry )` for the same options.
+
+A few things to know:
+
+- **Critical-CSS dedupe is handled for you.** The first `cssTags()` (or
+  `tags()`) call per request emits the inline `<style>`; later calls
+  suppress it but still preload-swap the CSS link. Mixing `cssTags()`
+  with a later accidental `tags()` won't double-render the inline.
+- **Use one or the other, not both** for the same entry in the same
+  request. `cssTags + jsTags` *or* `tags`. Combining them creates
+  duplicate output.
+- **Vite dev mode** (`isHot()` true): `cssTags()` returns `""` because
+  Vite injects CSS through the entry script, and `jsTags()` emits the
+  single dev-server `<script>`. The page still works; the JS-at-bottom
+  layout means a brief FOUC in dev, which is normally fine in exchange
+  for the HMR experience.
+- **Flat-manifest users** (Mix / Elixir / custom) can either use this
+  split with separate keys (`cssTags( "/css/app.css" )` +
+  `jsTags( "/js/app.js" )`) or just keep calling `tags()` twice with
+  separate keys — which has always worked.
+
+### Doing it manually with `bundle()` and `criticalCss()`
+
+When you need full control over markup — custom attributes, async
+vs defer, integrity hashes, ESM/nomodule pairs, preconnect hints, etc. —
+reach for `bundle()` and assemble the HTML yourself:
+
+```cfm
+<cfset b = mixr().bundle( "resources/js/app.js" )>
+<cfset critical = mixr().criticalCss( markRendered: true )>
+
+<head>
+    <cfif len( critical )><style>#critical#</style></cfif>
+    <cfloop array="#b.css#" item="href">
+        <link rel="stylesheet" href="#href#" />
+    </cfloop>
+</head>
+
+<body>
+    <!-- ... -->
+
+    <cfloop array="#b.preload#" item="href">
+        <link rel="modulepreload" href="#href#" />
+    </cfloop>
+    <!-- e.g. plain script instead of type="module" -->
+    <script defer src="#b.js#"></script>
+</body>
+```
+
+Two contract notes:
+
+- `bundle()` is a pure read. It does NOT set the per-request
+  inline-rendered flag — so if you also call `tags()` later in the same
+  request, it would emit its own inline `<style>` and you'd get a
+  duplicate.
+- `criticalCss( eventName, { markRendered: true } )` returns the inline
+  body AND sets the flag (only when the result is non-empty), so a
+  later `tags()` call suppresses its inline.
+
+In Vite dev (`isHot()` true), `bundle().css`, `bundle().preload`, and
+`bundle().criticalCss` are all empty; `bundle().js` is the dev-server
+URL. Loops over the empty arrays no-op cleanly, but branch on
+`mixr().isHot()` if you want different markup in dev.
+
+### 2.x-style: just give me a URL
+
+If you already had a template that worked in 2.x and you don't want to
+change much, the legacy string form still resolves a path:
+
+```cfm
+<link rel="stylesheet" href="#mixr( '/css/app.css' )#" />
+<script src="#mixr( '/js/app.js' )#"></script>
+
+<!-- or the fluent equivalent -->
+<link rel="stylesheet" href="#mixr().path( '/css/app.css' )#" />
+<script src="#mixr().path( '/js/app.js' )#"></script>
+```
+
+Trade-off: with the flat-manifest driver this works exactly as before
+and you get full control over the tags. With the **Vite** driver,
+`path()` only returns the entry's compiled file — you lose
+imported-chunk CSS, `<link rel="modulepreload">` for shared chunks, and
+critical-CSS inlining. If you're on Vite and want the bundle to be
+correct, use `tags()` or `cssTags()` + `jsTags()` instead, or call
+`bundle()` and render the pieces yourself as shown above.
+
+---
+
+## Upgrade guide: 2.x → 3.0
+
+Good news first: if you're on 2.x and calling `mixr( "/js/app.js" )`, you
+don't have to change anything. The default `driver: "auto"` falls back to
+the flat-manifest driver when no Vite manifest or hot file is around, so
+your existing app keeps working.
+
+What's new:
+
+- **Driver setting**: `driver = "vite" | "manifest" | "auto"` (default `auto`).
+- **Vite settings**: `buildPath`, `hotFilePath`, `devServerUrl`, `devMode`,
+  `renderModulePreload`, `includeImportedCss`, `cache.devCheckInterval`.
+- **Fluent API**: `mixr().path()` / `.tags()` / `.bundle()` / `.criticalCss()` /
+  `.viteClient()` / `.isHot()` / `.refresh()`.
+- **Critical CSS** (opt-in): inline + preload-swap rendering with
+  `<noscript>` fallback. Drop per-route files at
+  `includes/critical/<event>.critical.css`.
+- **Submodule settings are self-contained.** Earlier 3.0 drafts cascaded
+  "behavioral" keys (`devMode` and friends) from the host into
+  submodules. The final release drops that. Configure each submodule
+  explicitly, or use `mixr.modules.<name>` from the host. See
+  [`AGENTS.md`](AGENTS.md) for the resolution chain.
+
+The Vite manifest default is `/includes/build/.vite/manifest.json`. If
+you're upgrading a Mix or Elixir app and not switching bundlers, just
+point `manifestPath` at the manifest you already have:
 
 ```js
-// config/Coldbox.cfc
 mixr = {
-    "manifestPath": "/includes/rev-manifest.json",
-    "prependModuleRoot": true,
-    "prependPath": "",
-    "modules": {}
-}
+    driver       : "manifest",   // or "auto"
+    manifestPath : "/includes/mix-manifest.json"
+};
 ```
 
-#### Laravel Mix
+---
 
-No need to change any defaults. It should work out of the box. Here is the configuration, just in case you need to change it:
+## About the author
 
-```js
-// configure mixr to use laravel mix conventions
-mixr = {
-    "manifestPath": "/includes/mix-manifest.json",
-    "prependModuleRoot": true,
-    "prependPath": "/includes",
-    "modules": {}
-}
-```
-
-#### Custom Asset Bundler
-
-```js
-// custom maifest file located in /dist/custom-manifest.json
-{
-    "js/app.js": "js/app.12345678.js",
-    "css/app.css": "css/app.87654321.css"
-}
-```
-
-```js
-mixr = {
-    "manifestPath": "/dist/custom-manifest.json",
-    "prependModuleRoot": true,
-    "prependPath": "dist", // prepend the 'dist' folder to the path
-    "modules": {}
-}
-```
-
-## Why Mixr?
-
-Why Does Coldbox need another asset helper?  Here are a few reasons why Mixr is a great choice for your Coldbox app: 
-
- - Coldbox Elixir is a great asset helper, but it is not flexible enough to work with other asset bundlers like Laravel Mix.  Mixr is designed to work with any asset bundler that generates a manifest file. 
- - Mixr registers itself as a Coldbox helper method, so it can automatically detect which module you are in any time you call `mixr()`
- - Calling `mixr()` is quick and easy, and will keep your source code nice and clean.
- - You can configure different settings for each submodule giving you maximum control over your assets and manifest files.
-
-
- ## Roadmap:
-
- - Integration tests: I currently have unit tests in place, but would like to set up some better real-world testing for this module.
-
-## About the Author:
-
-This module was passionately developed by [Angry Sam Productions](https://www.angrysam.com), a web development company based in California. We believe creating and contributing open source software strenghens the development community and makes the world a better place.  If you would like to learn more about our company or hire us for your next project, please [contact us](https://www.angrysam.com/).
-
-## Running Tests
-
-To run the tests, simply run the following command from the root of the project in Commandbox:
-`start server-lucee@5.json` (or whichever server JSON you want to use)
-`server open` (to open the server in your browser)
-navigate to `/tests/runner.cfm` in your browser
-
-```bash
+Mixr is developed by [Angry Sam Productions](https://www.angrysam.com).
+Pull requests, issues, and ideas welcome.

@@ -1,14 +1,14 @@
 {
 	"name" 		: "mixr",
-	"version"   : "2.0.1",
+	"version"   : "3.0.0",
 	"author" 	: "Angry Sam Productions, Inc.",
     "location":"ForgeboxStorage",
 	"homepage"	: "https://github.com/homestar9/mixr",
 	"documentation"		: "https://github.com/homestar9/mixr",
 	"repository"		: { "type" : "git", "url" : "https://github.com/homestar9/mixr" },
 	"bugs" : "https://github.com/homestar9/mixr",
-	"shortDescription"	: "Mixr is a simple, yet flexible static asset helper for Coldbox applications",
-    "description":"Mixr is a simple, yet flexible static asset helper for Coldbox applications.  Mixr can be configured to use a variety of conventions including Coldbox Elixir, Laraval Mix, or even custom asset bundlers. Use Mixr in your app to automatically generate correct distribition asset paths in your Coldbox views and layouts.  Mixr automatically parses and maps asset manifests files to return the real path.",
+	"shortDescription"	: "ColdBox asset helper for Vite, Laravel Mix, ColdBox Elixir, and custom manifest bundlers",
+    "description":"Mixr is a flexible static asset helper for ColdBox apps. It resolves logical asset paths into the real, hashed files your bundler emits, with first-class support for Vite (production manifests + dev-server hot reload), Laravel Mix, ColdBox Elixir, and any custom flat-key manifest. Registers a global mixr() helper available in handlers, layouts, and views.",
 	"slug"		: "mixr",
 	"type"		: "modules",
 	"keywords":"",
@@ -24,14 +24,10 @@
 	},
 	"devDependencies" 	:{
 		"commandbox-cfformat":"*",
-        "commandbox-docbox":"*",
 		"commandbox-dotenv":"*",
-        "commandbox-cfconfig":"*",
-        "testbox":"^4.5.0+5"
+        "commandbox-cfconfig":"*"
 	},
-    "installPaths":{
-        "testbox":"testbox/"
-    },
+    "installPaths":{},
 	"ignore":[
         "**/.*",
         "test-harness",
@@ -40,12 +36,35 @@
 	"scripts":{
 		"setupTemplate": "task run taskFile=build/SetupTemplate.cfc",
 		"build:module":"task run taskFile=build/Build.cfc :projectName=`package show slug` :version=`package show version`",
-		"build:docs":"task run taskFile=build/Build.cfc target=docs :projectName=`package show slug` :version=`package show version`",
         "install:dependencies":"install && cd test-harness && install",
 		"release":"recipe build/release.boxr",
         "format":"cfformat run helpers,models,test-harness/tests/,ModuleConfig.cfc --overwrite",
         "format:watch":"cfformat watch helpers,models,test-harness/tests/,ModuleConfig.cfc ./.cfformat.json",
-        "format:check":"cfformat check helpers,models,test-harness/tests/,ModuleConfig.cfc"
+        "format:check":"cfformat check helpers,models,test-harness/tests/,ModuleConfig.cfc",
+        "start:boxlang" : "server start serverConfigFile=server-boxlang-cfml@1.json",
+		"start:lucee5" : "server start serverConfigFile=server-lucee@5.json",
+        "start:lucee6" : "server start serverConfigFile=server-lucee@6.json",
+        "start:2018" : "server start serverConfigFile=server-adobe@2018.json",
+        "start:2021" : "server start serverConfigFile=server-adobe@2021.json",
+		"start:2023" : "server start serverConfigFile=server-adobe@2023.json",
+		"stop:boxlang" : "server stop serverConfigFile=server-boxlang-cfml@1.json",
+		"stop:lucee5" : "server stop serverConfigFile=server-lucee@5.json",
+        "stop:lucee6" : "server stop serverConfigFile=server-lucee@6.json",
+		"stop:2018" : "server stop serverConfigFile=server-adobe@2018.json",
+        "stop:2021" : "server stop serverConfigFile=server-adobe@2021.json",
+		"stop:2023" : "server stop serverConfigFile=server-adobe@2023.json",
+		"logs:boxlang" : "server log serverConfigFile=server-boxlang-cfml@1.json",
+		"logs:lucee5" : "server log serverConfigFile=server-lucee@5.json --follow",
+        "logs:lucee6" : "server log serverConfigFile=server-lucee@6.json --follow",
+		"logs:2018" : "server log serverConfigFile=server-adobe@2018.json --follow",
+        "logs:2021" : "server log serverConfigFile=server-adobe@2021.json --follow",
+		"logs:2023" : "server log serverConfigFile=server-adobe@2023.json --follow",
+		"forget:lucee5" : "server forget serverConfigFile=server-lucee@5.json",
+        "forget:lucee6" : "server forget serverConfigFile=server-lucee@6.json",
+		"forget:2018" : "server forget serverConfigFile=server-adobe@2018.json",
+        "forget:2021" : "server forget serverConfigFile=server-adobe@2021.json",
+		"forget:2023" : "server forget serverConfigFile=server-adobe@2023.json",
+        "forget:boxlang" : "server forget serverConfigFile=server-boxlang-cfml@1.json"
     },
 	"testbox":{
         "runner":"http://localhost:60299/tests/runner.cfm"

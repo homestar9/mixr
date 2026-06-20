@@ -1,5 +1,45 @@
 <cfoutput>
-    <h2>Mixr Tests</h2>
+    
+    <h2>Mixr 3.0 Fluent Chains</h2>
+
+    <!--- path() — single resolved URL string --->
+    <div>
+        #mixr().path( "/css/app.css" )#
+    </div>
+    <!--- bundle() — { js, css[], preload[], criticalCss } --->
+    <div>
+        <cfdump var="#mixr().bundle( "/css/app.css" )#">
+    </div>
+    <!--- criticalCss() — just the inline CSS body for the current event --->
+    <cfset critical = mixr().criticalCss()>
+    <cfif len( critical )>
+        <style>#critical#</style>
+    </cfif>
+    <!--- tags() — fully-rendered HTML --->
+    <div>
+        #mixr().tags( "/js/app.js" )#
+    </div>
+
+    <h2>Head/body split — cssTags() + jsTags()</h2>
+    <!---
+        Recommended template shape: cssTags() goes in <head>, jsTags() goes
+        just before </body>. Here they're side-by-side for visual diffing.
+    --->
+    <div style="margin-bottom:.5em">
+        <strong>cssTags( "/css/app.css" ):</strong>
+        <pre>#encodeForHtml( mixr().cssTags( "/css/app.css" ) )#</pre>
+    </div>
+    <div style="margin-bottom:.5em">
+        <strong>jsTags( "/js/app.js" ):</strong>
+        <pre>#encodeForHtml( mixr().jsTags( "/js/app.js" ) )#</pre>
+    </div>
+    <div>
+        <strong>vite submodule cssTags + jsTags:</strong>
+        <pre>#encodeForHtml( mixr( moduleName = "vite" ).cssTags( "resources/js/app.js", { skipCritical: true } ) )#</pre>
+        <pre>#encodeForHtml( mixr( moduleName = "vite" ).jsTags( "resources/js/app.js", { skipCritical: true } ) )#</pre>
+    </div>
+
+    <h2>Legacy Mixr 2.0 Tests</h2>
 
     <!--- Assets in this module --->
     <div>
@@ -33,5 +73,9 @@
     <div>
         #mixr( "includes/css/elixir.css", "elixir" )#
     </div>
+
+
+
+
 
 </cfoutput>

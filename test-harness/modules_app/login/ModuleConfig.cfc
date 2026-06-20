@@ -24,8 +24,14 @@ component {
         };
         
         // module settings - stored in modules.name.settings
-        // Note: We are using the default Coldbox elixir convention for Mixr
-		variables.settings = {};
+		// Only the manifestPath needs declaring — login uses a Mix-style
+		// flat manifest. Everything else (driver auto-detect, prepend
+		// behavior) inherits sane system defaults.
+		variables.settings = {
+			mixr = {
+				"manifestPath" : "/includes/mix-manifest.json"
+			}
+		};
 
 	}
 

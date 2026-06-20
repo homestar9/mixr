@@ -9,8 +9,8 @@ component {
 	this.title 				= "mixr";
 	this.author 			= "Angry Sam Productions, Inc.";
 	this.webURL 			= "https://github.com/homestar9/mixr";
-	this.description 		= "Returns the mix'd path of a public asset from a manifest file";
-	this.version 			= "1.0.0";
+	this.description 		= "ColdBox asset helper for Vite, Laravel Mix, ColdBox Elixir, and custom manifest bundlers";
+	this.version 			= "3.0.0";
 
 	// Model Namespace
 	this.modelNamespace		= "mixr";
@@ -26,14 +26,18 @@ component {
 
 	/**
 	 * Configure Module
+	 *
+	 * Mixr's system defaults are declared in a single place:
+	 * `models/Mixr.cfc systemDefaults()`. They are merged in at runtime by
+	 * `effectiveSettings()`, so any keys the host (or a submodule) does not
+	 * specify will fall through to those defaults — there is no need to
+	 * mirror them here.
+	 *
+	 * Settings do NOT cascade between modules. See `models/Mixr.cfc`
+	 * `effectiveSettings()` for the resolution chain.
 	 */
 	function configure(){
-		settings = {
-            "manifestPath" = "/includes/mix-manifest.json",
-            "prependModuleRoot" = true,
-            "prependPath" = "/includes",
-            "modules": {}
-		};
+		variables.settings = {};
 	}
 
 	/**
