@@ -204,9 +204,9 @@ This is a harness quirk, not a mixr bug. Do not push the forced reload into `mix
 
 ## Engine support
 
-Last verified passing **140/140 specs on Lucee 5.4.8.2** (full suite, after the `prependModuleRoot` Vite fix added 8 `ViteDriverTest` specs). The other supported engines below were last verified on the `criticalCss` baseline — **re-verify them before merging** (the `prependModuleRoot` change has only been run on Lucee 5 so far):
+Last verified passing **150/150 specs on Lucee 5.4.8.2** (full suite, after the CSS-only-entry `attributes` fix added 10 specs: 5 `TagRendererTest`, 2 `ViteDriverTest`, 1 `ManifestDriverTest`, 2 `CrossDriverAttributeTest`). The other supported engines below were last verified on the `criticalCss` baseline — **re-verify them before merging** (the `prependModuleRoot` and `attributes` changes have only been run on Lucee 5 so far):
 
-- Lucee 5.4.8.2 — ✓ 140/140
+- Lucee 5.4.8.2 — ✓ 150/150
 - Lucee 6.2.6.19 — re-verify
 - Adobe ColdFusion 2018, 2021, 2023 — re-verify
 
