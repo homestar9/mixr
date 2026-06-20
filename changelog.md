@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ----
 
-## [3.0.0] => 2026-05-07
+## [3.0.0] => 2026-06-19
 
 * **New** — First-class **Vite** support: production manifest resolution, dev-server hot reload via the Vite hot file, CSS aggregation across imported chunks, `<link rel="modulepreload">` emission, and `@vite/client` injection (deduped per request).
 * **New** — Driver architecture: `driver: "vite" | "manifest" | "auto"`. The `auto` driver (default) picks Vite when it sees a hot file or a Vite-shaped manifest, otherwise falls back to the flat-manifest driver.
