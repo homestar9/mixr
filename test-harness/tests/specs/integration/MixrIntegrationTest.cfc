@@ -79,6 +79,22 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				expect( p ).notToInclude( "tests/resources" );
 			} );
 
+			it( "throws a self-documenting ManifestNotFound for a 2.x-default app (auto, no manifestPath, no manifest)", function(){
+				// legacyMix declares driver:"auto" but no manifestPath, and ships
+				// no Vite manifest / hot file — exactly a 2.x app that upgraded and
+				// relied on the old default. The error must name the migration fix.
+				var threw = false;
+				try {
+					mixr.path( entry = "/js/app.js", moduleName = "legacyMix" );
+				} catch ( any e ) {
+					threw = true;
+					expect( e.type ).toBe( "ManifestNotFound" );
+					expect( e.detail ).toInclude( "manifestPath" );
+					expect( e.detail ).toInclude( "mix-manifest.json" );
+				}
+				expect( threw ).toBeTrue( "expected mixr.path to throw for the legacyMix module" );
+			} );
+
 			describe( "critical CSS (vite submodule, criticalCss.enabled=true via ModuleConfig)", function(){
 				beforeEach( function( currentSpec ){
 					// reset the per-request inline-dedupe flag for a clean state
@@ -123,6 +139,26 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					);
 					expect( html ).notToInclude( "<style>" );
 					expect( html ).toInclude( "<link rel=""stylesheet""" );
+				} );
+
+				it( "a leading skipCritical tags() call does NOT suppress a later normal tags() inline #encodeForHtml( "<style>" )#", function(){
+					// Regression: the dedupe flag used to be set eagerly on the
+					// first tags() call regardless of whether it emitted an inline.
+					// A leading skipCritical:true call must not suppress a later
+					// real one — the flag is set only when inline is actually emitted.
+					var first = mixr.tags(
+						entry      = "resources/js/app.js",
+						moduleName = "vite",
+						options    = { criticalEvent: "main.index", skipCritical: true }
+					);
+					expect( first ).notToInclude( "<style>" );
+
+					var second = mixr.tags(
+						entry      = "resources/js/app.js",
+						moduleName = "vite",
+						options    = { criticalEvent: "main.index" }
+					);
+					expect( second ).toInclude( "<style>" );
 				} );
 
 				it( "per-request dedupe: a second tags() call in the same request emits no inline #encodeForHtml( "<style>" )#", function(){
