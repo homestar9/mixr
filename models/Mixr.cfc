@@ -103,22 +103,21 @@ component
 			}
 		}
 
-		// Per-request dedupe of the inline <style>. First call sets the flag
-		// and emits the inline; later calls signal the driver to suppress it
-		// (the preload-swap CSS link is still emitted).
-		try {
-			var event = controller.getRequestService().getContext();
-			var flag  = "mixr:criticalInlined:" & arguments.moduleName;
-			if ( event.privateValueExists( flag ) ) {
-				opts.criticalSuppressInline = true;
-			} else {
-				event.setPrivateValue( flag, true );
-			}
-		} catch ( any e ) {
-			// Outside a request — caller is responsible for not double-rendering.
-		}
+		var driver = driverFor( arguments.moduleName );
 
-		return driverFor( arguments.moduleName ).tags( arguments.entry, opts );
+		// Per-request dedupe of the inline <style>. Suppress the inline when an
+		// earlier call this request already emitted it; otherwise mark the flag
+		// only if THIS call actually emits an inline body — so a leading
+		// skipCritical (or critical-less) call can't suppress a later real one.
+		var suppress = inlineAlreadyEmitted( arguments.moduleName );
+		if ( suppress ) opts.criticalSuppressInline = true;
+
+		var html = driver.tags( arguments.entry, opts );
+
+		if ( !suppress && len( driver.criticalCss( opts ) ) ) {
+			markInlineEmitted( arguments.moduleName );
+		}
+		return html;
 	}
 
 	/**
@@ -149,19 +148,20 @@ component
 			}
 		}
 
-		try {
-			var event = controller.getRequestService().getContext();
-			var flag  = "mixr:criticalInlined:" & arguments.moduleName;
-			if ( event.privateValueExists( flag ) ) {
-				opts.criticalSuppressInline = true;
-			} else {
-				event.setPrivateValue( flag, true );
-			}
-		} catch ( any e ) {
-			// outside a request — caller is responsible for not double-rendering.
-		}
+		var driver = driverFor( arguments.moduleName );
 
-		return driverFor( arguments.moduleName ).cssTags( arguments.entry, opts );
+		// Same per-request inline dedupe as tags(): suppress when already
+		// emitted this request, and only mark the flag when THIS call actually
+		// emits an inline body.
+		var suppress = inlineAlreadyEmitted( arguments.moduleName );
+		if ( suppress ) opts.criticalSuppressInline = true;
+
+		var html = driver.cssTags( arguments.entry, opts );
+
+		if ( !suppress && len( driver.criticalCss( opts ) ) ) {
+			markInlineEmitted( arguments.moduleName );
+		}
+		return html;
 	}
 
 	/**
@@ -541,7 +541,7 @@ component
 			throw(
 				message = "Mixr could not auto-detect driver: no manifest found",
 				type    = "ManifestNotFound",
-				detail  = "Checked #manifestAbs#. Set 'driver' explicitly or provide a manifest."
+				detail  = "Checked #manifestAbs#. If you are upgrading from mixr 2.x, the default manifestPath changed to the Vite path; set it to your existing manifest, e.g. mixr = { manifestPath: ""/includes/mix-manifest.json"" }. Otherwise set 'driver' explicitly or provide a manifest."
 			);
 		}
 		try {
@@ -587,6 +587,40 @@ component
 	private any function getRenderer() {
 		if ( isSimpleValue( variables._renderer ) ) variables._renderer = wirebox.getInstance( "TagRenderer@mixr" );
 		return variables._renderer;
+	}
+
+	/**
+	 * True when an inline critical <style> has already been emitted for this
+	 * module earlier in the current request. Outside a request (scheduled
+	 * task, etc.) returns false — the caller owns dedupe there.
+	 *
+	 * @moduleName Module name ("" for root).
+	 */
+	private boolean function inlineAlreadyEmitted( required string moduleName ) {
+		try {
+			return controller.getRequestService()
+				.getContext()
+				.privateValueExists( "mixr:criticalInlined:" & arguments.moduleName );
+		} catch ( any e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * Mark that an inline critical <style> has been emitted for this module
+	 * this request, so subsequent tags()/cssTags() calls suppress their own.
+	 * Silently no-ops outside a request context.
+	 *
+	 * @moduleName Module name ("" for root).
+	 */
+	private function markInlineEmitted( required string moduleName ) {
+		try {
+			controller.getRequestService()
+				.getContext()
+				.setPrivateValue( "mixr:criticalInlined:" & arguments.moduleName, true );
+		} catch ( any e ) {
+			// outside a request — nothing to dedupe against.
+		}
 	}
 
 	/**

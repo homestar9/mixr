@@ -15,7 +15,7 @@ All commands are run via [CommandBox](https://commandbox.ortusbooks.com/) (`box`
 box run-script install:dependencies
 
 # start an engine — port 60299, webroot is test-harness/
-box run-script start:lucee5      # also: start:lucee6, start:2018, start:2021, start:2023
+box run-script start:lucee5      # also: start:lucee6, start:2023, start:boxlang
 box server open                  # open the running server in a browser
 
 # stop / forget / logs follow the same pattern
@@ -37,7 +37,7 @@ box run-script build:module    # produces distributable artifact
 box run-script release         # runs build/release.boxr recipe
 ```
 
-A `start:boxlang` / `stop:boxlang` script exists but BoxLang is currently unverified (TestBox runner returns 500 under BoxLang 1.13; cause unknown). Skip BoxLang unless investigating it specifically.
+BoxLang is supported and verified (full suite passes on BoxLang 1.14.0 — the earlier 500 under 1.13 is resolved). Use `start:boxlang` / `stop:boxlang` like any other engine.
 
 The harness server aliases `/moduleroot/mixr` to the repo root (`../`) so the test app can `import` the module under development without a separate install. Don't change that alias — `test-harness/config/Coldbox.cfc` registers the module under the harness via `invocationPath = "moduleroot"`.
 
@@ -172,7 +172,7 @@ Callers who reach for `bundle()` (rendering their own `<script>`/`<link>`/`<styl
 1. **`bundle().criticalCss`** — a string field on the bundle struct. Empty when `criticalCss.enabled=false`, in dev, no event, or file missing. Same rules as `readCriticalCss()`. Driven by `options.criticalEvent` (auto-detected from RequestContext when omitted) and `options.skipCritical`.
 2. **`mixr().criticalCss( eventName, options )`** — standalone fluent method. Returns the same string without forcing a manifest read. Use when you only want the inline body. The first positional arg is the event name (empty default → auto-detect from RequestContext); `options` carries `skipCritical` and `markRendered`. The asymmetry with `bundle()`/`tags()` is intentional: critical CSS is event-keyed, so for `criticalCss()` the event IS the primary identifier — same role `entry` plays in `path()`/`tags()`/`bundle()`. Lives on `Mixr.cfc` and `MixrScope.cfc`; the fluent shape is `mixr().criticalCss( "main.index" )`.
 
-**Per-request dedupe is opt-in for these methods.** `tags()` auto-sets `mixr:criticalInlined:#moduleName#` so a second `tags()` call in the same request suppresses its inline. `bundle()` and `criticalCss()` are pure reads by default — they do NOT touch the flag. Callers combining `criticalCss()` (manual rendering) with a later `tags()` call should pass `options.markRendered = true` on the `criticalCss()` call (e.g. `mixr().criticalCss( "main.index", { markRendered: true } )`) so `tags()` will suppress its inline. The flag is only set when the returned string is non-empty.
+**Per-request dedupe is opt-in for these methods.** `tags()` (and `cssTags()`) set `mixr:criticalInlined:#moduleName#` **only when that call actually emits an inline `<style>`** — checked via `Mixr.inlineAlreadyEmitted()` / `markInlineEmitted()` after delegating to the driver. (Earlier the flag was set eagerly on the first call regardless, so a leading `skipCritical:true` or critical-less call would wrongly suppress a later real one — fixed.) A second emitting call in the same request suppresses its inline. `bundle()` and `criticalCss()` are pure reads by default — they do NOT touch the flag. Callers combining `criticalCss()` (manual rendering) with a later `tags()` call should pass `options.markRendered = true` on the `criticalCss()` call (e.g. `mixr().criticalCss( "main.index", { markRendered: true } )`) so `tags()` will suppress its inline. The flag is only set when the returned string is non-empty.
 
 The `bundle()` method does NOT accept `markRendered` — bundle is a pure data shape. If you want both the data and the dedupe-mark, call `criticalCss( eventName, { markRendered: true } )` first, then `bundle()`.
 
@@ -204,13 +204,12 @@ This is a harness quirk, not a mixr bug. Do not push the forced reload into `mix
 
 ## Engine support
 
-Last verified passing **150/150 specs on Lucee 5.4.8.2** (full suite, after the CSS-only-entry `attributes` fix added 10 specs: 5 `TagRendererTest`, 2 `ViteDriverTest`, 1 `ManifestDriverTest`, 2 `CrossDriverAttributeTest`). The other supported engines below were last verified on the `criticalCss` baseline — **re-verify them before merging** (the `prependModuleRoot` and `attributes` changes have only been run on Lucee 5 so far):
+The full suite is run on each supported engine before release. Supported engines:
 
-- Lucee 5.4.8.2 — ✓ 150/150
-- Lucee 6.2.6.19 — re-verify
-- Adobe ColdFusion 2018, 2021, 2023 — re-verify
-
-BoxLang is currently unverified (test runner returns 500 under 1.13; root cause not yet known).
+- Lucee 5.4.8.2
+- Lucee 6.2.6.19
+- Adobe ColdFusion 2023
+- BoxLang 1.14.0
 
 ### Cross-engine portability notes
 
@@ -232,6 +231,7 @@ The 3.0 release is non-breaking for the 2.x string form of `mixr()`. Specificall
 
 - `mixr( asset )` and `mixr( asset, moduleName )` continue to return a resolved path string.
 - Apps with no Mixr configuration changes will get `driver: "auto"`, which falls back to the manifest driver when their existing flat manifest is present and no Vite hot file/manifest exists.
+- **One documented 3.0 break:** the default `manifestPath` moved from the 2.x `/includes/mix-manifest.json` to the Vite path `/includes/build/.vite/manifest.json`. A 2.x app that relied on the *default* path (never set `manifestPath`) must now set it explicitly. This is intentional (it keeps Vite the zero-config default) — there is deliberately **no** silent legacy-path fallback. Instead, the auto-detect `ManifestNotFound` thrown by `Mixr.resolveDriverName()` carries a migration hint naming the fix, so the failure is self-documenting. Don't add a fallback probe; keep the single default + the helpful error.
 - The exception types `ManifestNotFound`, `ManifestAssetNotFound`, `EntryNotFound`, `MalformedManifest`, `InvalidDriver`, and `MalformedCriticalCss` are part of the contract — preserve types if refactoring throw sites.
 - `Mixr.get(asset, moduleName)` is preserved as an alias for `path()`.
 
