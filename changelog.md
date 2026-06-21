@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 * **Compat** — The legacy `mixr( asset )` and `mixr( asset, moduleName )` string forms are unchanged. Existing 2.x apps work without configuration changes (the default `auto` driver resolves to the manifest driver in their case).
 * **Engines** — Verified on Lucee 5.4.8.2, Lucee 6.2.6.19, Adobe ColdFusion 2018, 2021, and 2023 (40/40 specs).
 * **Internals** — `Mixr.cfc` no longer extends `coldbox.system.FrameworkSupertype`; submodule settings are looked up via the `coldbox:moduleSettings:<name>` WireBox DSL.
+* **Engines** — Verified on Lucee 5, Lucee 6, Adobe ColdFusion 2023, and BoxLang 1.14. (Adobe ColdFusion 2018 and 2021 are no longer supported.)
 
 ## [2.0.1] => 2026-05-07
 
