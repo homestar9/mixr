@@ -99,7 +99,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 			} );
 
 			describe( "attributes (regression guard)", function(){
-					it( "tags() applies attributes to a CSS asset's <link> and a JS asset's <script>", function(){
+					it( "tags() applies attributes to a CSS asset's #encodeForHtml( "<link>" )# and a JS asset's #encodeForHtml( "<script>" )#", function(){
 						var d = buildDriver( {
 							manifestPath      : "/tests/resources/mix-manifest.json",
 							prependModuleRoot : false,
