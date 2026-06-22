@@ -533,7 +533,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 			} );
 
 			describe( "CSS-only entry via tags()", function(){
-				it( "prod: tags() decorates the stylesheet <link> with attributes (entry has no script)", function(){
+				it( "prod: tags() decorates the stylesheet #encodeForHtml( "<link>" )# with attributes (entry has no script)", function(){
 					var d    = buildDriver( { manifestPath : "/tests/resources/vite/manifest-css-only-entry.json" } );
 					var html = d.tags( "resources/scss/app.scss", { attributes: { "data-foo": true } } );
 					expect( html ).toInclude( "<link rel=""stylesheet"" href=""/includes/build/assets/styles-DjqQenkQ.css""" );

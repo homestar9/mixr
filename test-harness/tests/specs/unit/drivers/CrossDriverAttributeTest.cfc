@@ -53,7 +53,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 		// always lands on the same LOGICAL tag: the <script> for a JS entry,
 		// the stylesheet <link> for a CSS entry.
 		describe( "cross-driver attribute placement (Vite vs flat manifest)", function(){
-			it( "JS entry: `defer` lands on the entry <script> in BOTH drivers", function(){
+			it( "JS entry: `defer` lands on the entry #encodeForHtml( "<script>" )# in BOTH drivers", function(){
 				var vite     = buildVite( "/tests/resources/vite/manifest-with-imports.json" );
 				var manifest = buildManifest( "/tests/resources/mix-manifest.json" );
 
@@ -68,7 +68,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				expect( vHtml ).toInclude( "<link rel=""stylesheet"" href=""/includes/build/assets/app-abc123.css"" />" );
 			} );
 
-			it( "CSS entry: `data-x` lands on the stylesheet <link> in BOTH drivers", function(){
+			it( "CSS entry: `data-x` lands on the stylesheet #encodeForHtml( "<link>" )# in BOTH drivers", function(){
 				var vite     = buildVite( "/tests/resources/vite/manifest-css-only-entry.json" );
 				var manifest = buildManifest( "/tests/resources/mix-manifest.json" );
 

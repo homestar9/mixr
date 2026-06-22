@@ -60,7 +60,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				} );
 			} );
 
-			describe( "host modules.<name> override", function(){
+			describe( "host modules.#encodeForHtml( "<name>" )# override", function(){
 				it( "host's modules.fooModule supplies all keys to fooModule (which has no own mixr settings)", function(){
 					// fooModule's ModuleConfig has no mixr settings; host declares
 					// modules.fooModule = { driver: manifest, manifestPath: /public/mix-manifest.json, ... }

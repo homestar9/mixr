@@ -50,7 +50,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 			} );
 
 			describe( "attributes on CSS-only entries", function(){
-				it( "applies attributes to the stylesheet <link> for a CSS-only entry (no script)", function(){
+				it( "applies attributes to the stylesheet #encodeForHtml( "<link>" )# for a CSS-only entry (no script)", function(){
 					var html = r.viteProductionTags(
 						bundle     = { js : "", css : [ "assets/styles-x.css" ], preload : [] },
 						attributes = { "data-foo" : true }
@@ -59,7 +59,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).toInclude( "data-foo" );
 				} );
 
-				it( "leaves a JS entry's imported CSS <link> bare and decorates only the <script>", function(){
+				it( "leaves a JS entry's imported CSS #encodeForHtml( "<link>" )# bare and decorates only the #encodeForHtml( "<script>" )#", function(){
 					var html = r.viteProductionTags(
 						bundle     = { js : "assets/app.js", css : [ "assets/app.css" ], preload : [] },
 						attributes = { defer : true }
@@ -70,7 +70,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).toInclude( "<script type=""module"" src=""assets/app.js"" defer></script>" );
 				} );
 
-				it( "viteCriticalProductionTags: attributes land on the preload-swap <link> for a CSS-only entry", function(){
+				it( "viteCriticalProductionTags: attributes land on the preload-swap #encodeForHtml( "<link>" )# for a CSS-only entry", function(){
 					var html = r.viteCriticalProductionTags(
 						inlineCss  = ".a{}",
 						bundle     = { js : "", css : [ "assets/x.css" ], preload : [] },
@@ -80,7 +80,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).toInclude( "data-foo" );
 				} );
 
-				it( "viteCriticalProductionTags: a JS entry's preload-swap <link> stays bare (attrs go on the script)", function(){
+				it( "viteCriticalProductionTags: a JS entry's preload-swap #encodeForHtml( "<link>" )# stays bare (attrs go on the script)", function(){
 					var html = r.viteCriticalProductionTags(
 						inlineCss  = ".a{}",
 						bundle     = { js : "assets/app.js", css : [ "assets/x.css" ], preload : [] },
@@ -92,7 +92,7 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).toInclude( "data-foo></script>" );
 				} );
 
-				it( "viteCssTags criticalMode: attributes land on the preload-swap <link> regardless of bundle.js", function(){
+				it( "viteCssTags criticalMode: attributes land on the preload-swap #encodeForHtml( "<link>" )# regardless of bundle.js", function(){
 					var html = r.viteCssTags(
 						inlineCss  = ".a{}",
 						bundle     = { js : "assets/app.js", css : [ "assets/x.css" ], preload : [] },
