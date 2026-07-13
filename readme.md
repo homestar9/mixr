@@ -94,7 +94,7 @@ Add a basic Vite configuration to `config/Coldbox.cfc`:
 moduleSettings = {
     mixr : {
         driver  : "vite",
-        devMode : getSystemSetting( "ENVIRONMENT", "production" ) eq "development"
+        devMode : controller.getSetting( "environment" ) == "development"
     }
 };
 ```
@@ -114,7 +114,7 @@ moduleSettings = {
         manifestPath : "/includes/build/.vite/manifest.json",
         buildPath    : "/includes/build",
         hotFilePath  : "/includes/hot",
-        devMode      : getSystemSetting( "ENVIRONMENT", "production" ) eq "development"
+        devMode      : controller.getSetting( "environment" ) == "development"
     }
 };
 ```
@@ -442,7 +442,7 @@ moduleSettings = {
         driver       : "vite",
         manifestPath : "/includes/build/.vite/manifest.json",
         buildPath    : "/includes/build",
-        devMode      : getSystemSetting( "ENVIRONMENT", "production" ) eq "development",
+        devMode      : controller.getSetting( "environment" ) == "development",
 
         modules : {
             admin : {
@@ -474,7 +474,7 @@ component {
             driver       : "vite",
             manifestPath : "/includes/build/.vite/manifest.json",
             buildPath    : "/includes/build",
-            devMode      : getSystemSetting( "ENVIRONMENT", "production" ) eq "development"
+            devMode      : controller.getSetting( "environment" ) == "development"
         };
     }
 }
