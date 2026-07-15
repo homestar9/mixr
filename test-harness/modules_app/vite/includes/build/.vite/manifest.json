@@ -1,13 +1,23 @@
 {
     "resources/js/app.js": {
         "file": "assets/app-PROD123.js",
+        "name": "app",
         "src": "resources/js/app.js",
         "isEntry": true,
         "imports": [ "_vendor-VEND456.js" ],
-        "css": [ "assets/app-PROD123.css" ]
+        "dynamicImports": [ "_lazy-LAZY789.js" ],
+        "css": [ "assets/app-PROD123.css" ],
+        "assets": [ "assets/logo-LOGO321.svg" ]
     },
     "_vendor-VEND456.js": {
         "file": "assets/vendor-VEND456.js",
+        "name": "vendor",
         "css": [ "assets/vendor-VEND456.css" ]
+    },
+    "_lazy-LAZY789.js": {
+        "file": "assets/lazy-LAZY789.js",
+        "name": "lazy",
+        "isDynamicEntry": true,
+        "css": [ "assets/lazy-LAZY789.css" ]
     }
 }

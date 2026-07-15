@@ -553,6 +553,50 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 					expect( html ).notToInclude( "<link rel" );
 				} );
 			} );
+
+			describe( "Vite 8 manifest tolerance", function(){
+				// The Vite build-manifest schema (.vite/manifest.json) is unchanged
+				// across Vite 5–8; Vite 8's Rolldown/Oxc/Lightning CSS changes are
+				// build-engine internals, not manifest-format changes. The driver
+				// reads only `file` / `css` / `imports`, so extra fields a modern
+				// Vite emits (name, dynamicImports, assets, isDynamicEntry,
+				// integrity) must be ignored, and dynamically-imported chunks must
+				// NOT be pulled into the eager css[]/preload[] graph.
+				it( "ignores name/assets/integrity and resolves the static entry file", function(){
+					var d = buildDriver( { manifestPath : "/tests/resources/vite/manifest-vite8.json" } );
+					expect( d.path( "resources/js/app.js" ) ).toBe( "/includes/build/assets/app-BRBmoGS9.js" );
+				} );
+
+				it( "collects only static-import CSS, excluding dynamically-imported chunk CSS", function(){
+					var d = buildDriver( { manifestPath : "/tests/resources/vite/manifest-vite8.json" } );
+					var b = d.bundle( "resources/js/app.js" );
+					// entry css + static vendor css only — lazy (dynamicImport) css excluded
+					expect( b.css ).toHaveLength( 2 );
+					expect( b.css[ 1 ] ).toInclude( "app-BRBmoGS9.css" );
+					expect( b.css[ 2 ] ).toInclude( "vendor-C1n2b3X4.css" );
+					for ( var href in b.css ) {
+						expect( href ).notToInclude( "lazy-D5e6F7g8.css" );
+					}
+				} );
+
+				it( "modulepreloads only static imports, excluding dynamically-imported chunks", function(){
+					var d = buildDriver( { manifestPath : "/tests/resources/vite/manifest-vite8.json" } );
+					var b = d.bundle( "resources/js/app.js" );
+					expect( b.preload ).toHaveLength( 1 );
+					expect( b.preload[ 1 ] ).toInclude( "vendor-C1n2b3X4.js" );
+					for ( var href in b.preload ) {
+						expect( href ).notToInclude( "lazy-D5e6F7g8.js" );
+					}
+				} );
+
+				it( "renders production tags without leaking the lazy chunk or its CSS", function(){
+					var d    = buildDriver( { manifestPath : "/tests/resources/vite/manifest-vite8.json" } );
+					var html = d.tags( "resources/js/app.js" );
+					expect( html ).toInclude( "<script type=""module"" src=""/includes/build/assets/app-BRBmoGS9.js""" );
+					expect( html ).toInclude( "<link rel=""modulepreload"" href=""/includes/build/assets/vendor-C1n2b3X4.js""" );
+					expect( html ).notToInclude( "lazy-D5e6F7g8" );
+				} );
+			} );
 		} );
 	}
 

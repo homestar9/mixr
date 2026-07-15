@@ -38,6 +38,9 @@ component extends="coldbox.system.testing.BaseTestCase" appMapping="/" {
 				expect( html ).toInclude( root & "/includes/build/assets/app-PROD123.css" );
 				expect( html ).toInclude( root & "/includes/build/assets/vendor-VEND456.js" );
 				expect( html ).toInclude( root & "/includes/build/assets/app-PROD123.js" );
+				// Vite 8 manifest fields (dynamicImports, assets) are ignored: the
+				// dynamically-imported lazy chunk must not leak into eager output.
+				expect( html ).notToInclude( "lazy-LAZY789" );
 			} );
 
 			it( "detects the hot file in the viteSpa submodule and renders dev tags", function(){
