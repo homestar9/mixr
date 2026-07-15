@@ -10,7 +10,7 @@ component {
 	this.author 			= "Angry Sam Productions, Inc.";
 	this.webURL 			= "https://github.com/homestar9/mixr";
 	this.description 		= "ColdBox asset helper for Vite, Laravel Mix, ColdBox Elixir, and custom manifest bundlers";
-	this.version 			= "3.0.0";
+	this.version 			= "@build.version@+@build.number@";
 
 	// Model Namespace
 	this.modelNamespace		= "mixr";
