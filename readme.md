@@ -86,6 +86,8 @@ Mixr ships with a few drivers for different bundling strategies. Use this table 
 
 **Vite is the recommended choice for new projects.** It supports fast development builds, hot-module replacement, modern JavaScript modules, content-hashed production assets, imported CSS, and shared chunk preloading.
 
+> **Vite version support:** Mixr works with Vite versions 5 through 8 as long as the manifest file is present.
+
 ### 1. Configure Mixr
 
 Add a basic Vite configuration to `config/Coldbox.cfc`:

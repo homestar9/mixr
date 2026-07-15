@@ -1,6 +1,7 @@
 {
     "resources/js/app.js": {
         "file": "assets/app-abc123.js",
+        "name": "app",
         "src": "resources/js/app.js",
         "isEntry": true,
         "imports": [ "_vendor-def456.js" ],
@@ -8,15 +9,18 @@
     },
     "_vendor-def456.js": {
         "file": "assets/vendor-def456.js",
+        "name": "vendor",
         "css": [ "assets/vendor-def456.css" ],
         "imports": [ "_shared-ghi789.js" ]
     },
     "_shared-ghi789.js": {
         "file": "assets/shared-ghi789.js",
+        "name": "shared",
         "css": [ "assets/shared-ghi789.css" ]
     },
     "resources/js/admin.js": {
         "file": "assets/admin-xyz999.js",
+        "name": "admin",
         "src": "resources/js/admin.js",
         "isEntry": true
     }
