@@ -1,0 +1,24 @@
+{
+    "resources/js/app.js": {
+        "file": "assets/app-BRBmoGS9.js",
+        "name": "app",
+        "src": "resources/js/app.js",
+        "isEntry": true,
+        "imports": [ "_vendor-C1n2b3X4.js" ],
+        "dynamicImports": [ "_lazy-D5e6F7g8.js" ],
+        "css": [ "assets/app-BRBmoGS9.css" ],
+        "assets": [ "assets/logo-H9i0J1k2.svg" ],
+        "integrity": "sha384-oqVuAfXRKap7fdgcCY5uykM6+R9GqQ8K/uxy9rx7HNQlGYl1kPzQho1wx4JwY8w"
+    },
+    "_vendor-C1n2b3X4.js": {
+        "file": "assets/vendor-C1n2b3X4.js",
+        "name": "vendor",
+        "css": [ "assets/vendor-C1n2b3X4.css" ]
+    },
+    "_lazy-D5e6F7g8.js": {
+        "file": "assets/lazy-D5e6F7g8.js",
+        "name": "lazy",
+        "isDynamicEntry": true,
+        "css": [ "assets/lazy-D5e6F7g8.css" ]
+    }
+}

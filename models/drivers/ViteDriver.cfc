@@ -5,17 +5,27 @@
  * tag set. In development (hot file present), it routes paths through the
  * Vite dev server URL and skips manifest reads entirely.
  *
- * Vite manifest shape (per file key):
+ * Vite manifest shape (per file key). The schema of `.vite/manifest.json` is
+ * stable across Vite 5 through 8 — Vite 8's Rolldown/Oxc/Lightning CSS changes
+ * are build-engine internals and do not alter manifest output:
  *   {
  *     "resources/js/app.js": {
- *       "file":    "assets/app-abc.js",
- *       "src":     "resources/js/app.js",
- *       "isEntry": true,
- *       "imports": [ "_vendor-def.js" ],   // keys into this same manifest
- *       "css":     [ "assets/app-abc.css" ]
+ *       "file":           "assets/app-abc.js",
+ *       "name":           "app",
+ *       "src":            "resources/js/app.js",
+ *       "isEntry":        true,
+ *       "imports":        [ "_vendor-def.js" ],   // keys into this same manifest
+ *       "dynamicImports": [ "_lazy-ghi.js" ],      // lazy chunks — NOT walked here
+ *       "css":            [ "assets/app-abc.css" ]
  *     },
  *     "_vendor-def.js": { "file": "assets/vendor-def.js", "css": [ ... ] }
  *   }
+ *
+ * This driver reads only `file`, `css`, and `imports`. Every other field
+ * (`name`, `src`, `isEntry`, `isDynamicEntry`, `dynamicImports`, `assets`,
+ * `integrity`, …) is ignored — which is why newer Vite versions are
+ * non-breaking. Dynamically-imported chunks are intentionally excluded from
+ * the eager css[]/modulepreload graph.
  */
 component extends="AbstractDriver" {
 
